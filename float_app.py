@@ -77,7 +77,7 @@ def _apply_glass(hwnd: int) -> None:
     accent = ACCENT_POLICY()
     accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND
     accent.AccentFlags = 2
-    accent.GradientColor = 0x59FFFFFF  # ABGR：约 35% 白色底
+    accent.GradientColor = 0x30FFFFFF  # ABGR：约 19% 白色底，让壁纸颜色更多透进来
     data = WINDOWCOMPOSITIONATTRIBDATA()
     data.Attribute = WCA_ACCENT_POLICY
     data.Data = ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p)
@@ -158,10 +158,28 @@ class Api:
         return hwnd
 
 
+def _make_form_transparent():
+    """把 WinForms 宿主窗体背景设为透明。
+
+    否则窗体自己的白底会盖住 DWM 亚克力——这就是「玻璃变实心白卡」的根因。
+    pywebview 在 transparent=True 时已设 SupportsTransparentBackColor，
+    这里补上 BackColor = Transparent 即可让亚克力透上来。
+    """
+    try:
+        from System.Drawing import Color
+        from webview.platforms import winforms
+
+        for form in winforms.BrowserView.forms.values():
+            form.BackColor = Color.Transparent
+    except Exception as exc:
+        print("[float] form transparent failed:", exc)
+
+
 def _setup():
     hwnd = _find_hwnd()
     if hwnd:
         _apply_glass(hwnd)
+    _make_form_transparent()
 
 
 webview.create_window(
