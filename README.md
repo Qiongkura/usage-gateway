@@ -65,6 +65,21 @@ uv run python -m app.main
 默认只监听 `127.0.0.1`。要暴露到局域网，请务必设置 `server.admin_key`
 （保护 `/api/admin/*`）并自行评估 `/api` 只读统计接口的暴露面。
 
+### Windows：开机自启 + 一键打开
+
+在启动文件夹放一个静默启动脚本（`Win+R` → `shell:startup` → 新建 `usage-gateway.vbs`）：
+
+```vbs
+Set shell = CreateObject("WScript.Shell")
+shell.CurrentDirectory = "C:\path\to\usage-gateway"
+shell.Run "cmd /c if not exist logs mkdir logs", 0, True
+shell.Run "cmd /c uv run python -m app.main >> logs\gateway.log 2>&1", 0, False
+```
+
+登录后网关自动在后台运行（第二个实例会因端口占用自动退出，可放心重复执行）。
+再给桌面建一个指向 `http://127.0.0.1:9000/` 的快捷方式即可一键打开；
+用 Edge/Chrome 的 `--app=http://127.0.0.1:9000/` 模式可以得到无地址栏的独立窗口。
+
 ## 客户端接入
 
 任意 OpenAI SDK：
