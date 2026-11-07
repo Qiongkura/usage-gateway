@@ -22,16 +22,18 @@
     border-radius: 20px;
     color: #1a1d23;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.30);   /* 亚克力垫底自带 35% 白，这里只补淡 */
-    backdrop-filter: blur(22px) saturate(170%);
-    -webkit-backdrop-filter: blur(22px) saturate(170%);
-    border: 1px solid rgba(255, 255, 255, 0.6);
+    /* 白底压低：让亚克力模糊后的桌面颜色透进来，玻璃才有「内容」 */
+    background: rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
     box-shadow:
-      0 12px 34px rgba(16, 24, 40, 0.16),
-      inset 0 1px 1px rgba(255, 255, 255, 0.9),
-      inset 0 -1px 1.5px rgba(255, 255, 255, 0.4);
+      0 12px 34px rgba(16, 24, 40, 0.18),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+      inset 0 2px 8px rgba(255, 255, 255, 0.55),
+      inset 0 -12px 28px rgba(255, 255, 255, 0.16);
   }
-  /* 斜向流光：盖在内容之上，模拟玻璃镜面 */
+  /* 斜向流光 + 底部透镜厚度感 */
   #win::before {
     content: '';
     position: absolute;
@@ -40,9 +42,18 @@
     pointer-events: none;
     border-radius: inherit;
     background: linear-gradient(132deg,
-      rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.10) 34%,
-      rgba(255, 255, 255, 0.02) 52%, rgba(255, 255, 255, 0.16) 82%,
-      rgba(255, 255, 255, 0.34) 100%);
+      rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.12) 34%,
+      rgba(255, 255, 255, 0.02) 52%, rgba(255, 255, 255, 0.18) 82%,
+      rgba(255, 255, 255, 0.4) 100%);
+  }
+  #win::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow: inset 0 -14px 30px rgba(255, 255, 255, 0.15);
   }
   #win > * { position: relative; z-index: 1; }
 
@@ -65,13 +76,14 @@
   .btn:hover { background: rgba(255, 255, 255, 0.9); color: #1a1d23; }
   .btn.close:hover { background: #ef4444; color: #fff; }
 
+  /* 内容区上下留白完全对称；状态行悬浮在底部内边距里 */
   #main {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 14px 12px 10px;
+    padding: 20px 14px;
     min-height: 0;
   }
   #tps {
@@ -141,11 +153,14 @@
   }
 
   #status {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 6px;
+    z-index: 2;
     font-size: 8.5px;
     color: rgba(26, 29, 35, 0.4);
     text-align: center;
-    padding-bottom: 5px;
-    flex-shrink: 0;
     font-variant-numeric: tabular-nums;
     display: flex;
     align-items: center;
