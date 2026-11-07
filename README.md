@@ -25,7 +25,7 @@ token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细
 
 **概览：统计卡、趋势图、365 天活跃热力图**
 
-![概览](docs/screenshots/overview.png)
+![概览](docs/screenshots/overview-cards.png)
 
 **订阅额度多账号窗口（本地采集器自动同步，含 5h / 周窗口与重置时间）**
 
@@ -37,7 +37,7 @@ token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细
 
 **tok/s 悬浮小窗：实时生成速度 + 最近一笔的 token 与费用**
 
-![悬浮窗](docs/screenshots/float.png)
+![悬浮窗](docs/screenshots/float-widget.png)
 
 ## 特性
 

@@ -12,39 +12,46 @@
     overflow: hidden;
     user-select: none;
   }
-  /* 与看板同款浅色卡片：同色板 / 圆角 / 阴影 / 等宽数字 */
+  /* 看板同款设计语言：白卡 / 圆角 / 柔和阴影 / 等宽数字 */
   #win {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: rgba(255, 255, 255, 0.97);
+    background: #ffffff;
     border: 1px solid #e8eaee;
     border-radius: 14px;
-    box-shadow: 0 8px 28px rgba(16, 24, 40, 0.18);
+    box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16);
     color: #1a1d23;
     overflow: hidden;
-    backdrop-filter: blur(14px);
   }
   #drag {
-    height: 26px;
+    height: 28px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 6px 0 11px;
+    gap: 6px;
+    padding: 0 7px 0 11px;
     cursor: move;
     background: #f8f9fb;
     border-bottom: 1px solid #eef0f3;
     flex-shrink: 0;
   }
-  #title { font-size: 10px; color: #8b909a; letter-spacing: .12em; font-weight: 700; }
+  #drag .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #10b981; flex: none;
+  }
+  #drag.err .dot { background: #ef4444; }
+  #title {
+    font-size: 9.5px; color: #8b909a;
+    letter-spacing: .14em; font-weight: 700; flex: 1;
+  }
   #btns { display: flex; gap: 4px; }
   .btn {
-    width: 17px; height: 17px; border: none; border-radius: 5px;
-    background: rgba(26, 29, 35, 0.06); color: #6b7078;
+    width: 18px; height: 18px; border: none; border-radius: 5px;
+    background: rgba(26, 29, 35, 0.05); color: #8b909a;
     font-size: 10px; line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
   }
-  .btn:hover { background: rgba(26, 29, 35, 0.12); color: #1a1d23; }
+  .btn:hover { background: rgba(26, 29, 35, 0.11); color: #1a1d23; }
   .btn.close:hover { background: #ef4444; color: #fff; }
 
   #main {
@@ -53,11 +60,11 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2px 10px 8px;
+    padding: 4px 12px 8px;
     min-height: 0;
   }
   #tps {
-    font-size: 42px;
+    font-size: 44px;
     font-weight: 800;
     line-height: 1;
     letter-spacing: -1.5px;
@@ -66,58 +73,75 @@
     font-variant-numeric: tabular-nums;
   }
   #unit {
-    font-size: 10.5px;
-    color: #8b909a;
-    margin-top: 2px;
-    letter-spacing: .5px;
-  }
-  #meta {
-    margin-top: 6px;
     font-size: 10px;
-    color: #6b7078;
-    text-align: center;
-    line-height: 1.5;
-    width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    color: #8b909a;
+    margin-top: 3px;
+    letter-spacing: .4em;
+    font-weight: 600;
   }
-  #meta b { color: #4a4f57; font-weight: 600; }
-
   #spark {
-    height: 22px;
+    height: 26px;
     width: 100%;
-    margin-top: 4px;
+    margin: 8px 0 7px;
     display: flex;
     align-items: flex-end;
-    gap: 1.5px;
+    justify-content: center;
+    gap: 2px;
+    overflow: hidden;
     flex-shrink: 0;
   }
   #spark i {
-    flex: 1;
+    width: 3px;
+    border-radius: 1.5px 1.5px 0 0;
     background: #10b981;
-    border-radius: 1px 1px 0 0;
-    min-height: 1px;
-    opacity: .5;
+    min-height: 2px;
+    opacity: .38;
     transition: height .3s, opacity .3s;
   }
   #spark i:last-child { opacity: 1; }
 
-  #status {
-    font-size: 9px;
-    color: #9aa0a8;
+  #meta {
+    font-size: 10.5px;
+    color: #6b7078;
     text-align: center;
-    padding-bottom: 3px;
+    line-height: 1.55;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+  #meta b { color: #4a4f57; font-weight: 600; }
+  #meta .muted { color: #9aa0a8; }
+  .costpill {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 1.5px 9px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #b45309;
+    font-weight: 700;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #status {
+    font-size: 8.5px;
+    color: #b0b4bc;
+    text-align: center;
+    padding-bottom: 4px;
     flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
   }
   #status.err { color: #ef4444; }
-  .idle #tps { color: #c9ced6; }
+  .idle #tps { color: #d7dbe0; }
 </style>
 </head>
 <body>
 <div id="win">
   <div id="drag">
-    <span id="title">TOK/S</span>
+    <span class="dot"></span>
+    <span id="title">USAGE GATEWAY</span>
     <div id="btns">
       <button class="btn" id="btn-pin" title="置顶">📌</button>
       <button class="btn close" id="btn-close" title="关闭">✕</button>
@@ -126,9 +150,9 @@
 
   <div id="main">
     <div id="tps">—</div>
-    <div id="unit">tok/s</div>
-    <div id="meta">等待请求…</div>
+    <div id="unit">TOK/S</div>
     <div id="spark"></div>
+    <div id="meta">等待请求…</div>
   </div>
 
   <div id="status">连接中…</div>
@@ -137,9 +161,11 @@
 <script>
 const API = location.origin;
 const POLL_MS = 1500;
-const SPARK_N = 24;
+const SPARK_N = 36;
 
 let history = [];
+try { history = JSON.parse(localStorage.getItem('ug_spark') || '[]'); } catch (e) { history = []; }
+if (!Array.isArray(history)) history = [];
 let lastTs = null;
 let pinned = true;
 let timer = null;
@@ -149,14 +175,16 @@ const $ = id => document.getElementById(id);
 function setStatus(text, isErr) {
   $('status').textContent = text;
   $('status').className = isErr ? 'err' : '';
+  $('drag').className = isErr ? 'err' : '';
 }
 
 function renderSpark() {
   const el = $('spark');
   if (!history.length) { el.innerHTML = ''; return; }
   const max = Math.max(...history, 1);
-  el.innerHTML = history.map(v => {
-    const h = Math.max(2, Math.round(v / max * 22));
+  const shown = history.slice(-36);
+  el.innerHTML = shown.map(v => {
+    const h = Math.max(2, Math.round(v / max * 26));
     return `<i style="height:${h}px"></i>`;
   }).join('');
 }
@@ -165,7 +193,7 @@ function colorFor(tps) {
   if (tps >= 40) return '#10b981';
   if (tps >= 15) return '#f59e0b';
   if (tps > 0)   return '#ef4444';
-  return '#4a4f57';
+  return '#d7dbe0';
 }
 
 function fmtK(n) {
@@ -207,6 +235,7 @@ async function poll() {
       const tps = latest.gen_tok_per_sec || latest.tok_per_sec || 0;
       history.push(tps);
       if (history.length > SPARK_N) history.shift();
+      try { localStorage.setItem('ug_spark', JSON.stringify(history)); } catch (e) {}
       renderSpark();
 
       $('main').classList.remove('idle');
@@ -217,7 +246,9 @@ async function poll() {
     const lat = latest.latency_ms >= 1000
       ? (latest.latency_ms / 1000).toFixed(1) + 's'
       : Math.round(latest.latency_ms) + 'ms';
-    const ttft = latest.ttft_ms != null ? Math.round(latest.ttft_ms) + 'ms' : '—';
+    const ttft = latest.ttft_ms != null
+      ? (latest.ttft_ms >= 1000 ? (latest.ttft_ms / 1000).toFixed(1) + 's' : Math.round(latest.ttft_ms) + 'ms')
+      : '—';
     const avg = latest.tok_per_sec || 0;
 
     // 单次调用的 token 构成 + 缓存命中 + 费用
@@ -227,12 +258,12 @@ async function poll() {
 
     $('meta').innerHTML =
       `<b>${latest.source}</b> · ↑${fmtK(prompt)} 命中${hit}% · ↓${fmtK(latest.output_tokens)}<br>` +
-      `${lat} · 首字 ${ttft} · 均 ${avg.toFixed(1)}` +
-      (cost ? ` · <span style="color:#f59e0b;font-weight:700">${cost}</span>` : '');
+      `<span class="muted">${lat} · 首字 ${ttft} · 均 ${avg.toFixed(1)}</span>` +
+      (cost ? `<br><span class="costpill">${cost}</span>` : '');
 
     if (isNew) {
       $('win').animate(
-        [{ boxShadow: '0 0 0 2px rgba(16,185,129,0.6)' }, { boxShadow: '0 8px 28px rgba(0,0,0,0.45)' }],
+        [{ boxShadow: '0 0 0 2px rgba(16,185,129,0.55)' }, { boxShadow: '0 8px 24px rgba(16,24,40,0.16)' }],
         { duration: 700, easing: 'ease-out' }
       );
     }
