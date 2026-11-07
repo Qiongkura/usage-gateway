@@ -10,6 +10,29 @@
     --bg:#f5f6f8; --card:#fff; --line:#e8eaee; --text:#1a1d23; --muted:#8b909a;
     --blue:#3b82f6; --purple:#8b5cf6; --green:#10b981; --orange:#f59e0b;
     --teal:#14b8a6; --red:#ef4444; --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+    --panel:#f8f9fb; --hover:#fafbfd; --row-line:#f2f4f7;
+    --tag-bg:#eef2ff; --tag-text:#4338ca;
+    --chip-active-bg:#111; --chip-active-text:#fff;
+    --chart-grid:#f0f2f5; --heat-empty:#eceef2;
+    --h1:#d7f5e9; --h2:#9ae6c6; --h3:#4ade80; --h4:#16a34a;
+    --pill-amber-bg:rgba(245,158,11,.14); --pill-amber-text:#b45309;
+    --hit-hi-bg:rgba(16,185,129,.16); --hit-hi-text:#059669;
+    --hit-mid-bg:rgba(245,158,11,.16); --hit-mid-text:#b45309;
+    --hit-none-bg:rgba(139,144,154,.14); --hit-none-text:#8b909a;
+  }
+  html[data-theme="dark"]{
+    color-scheme: dark;
+    --bg:#0e1013; --card:#161920; --line:#262b36; --text:#e6e8ec; --muted:#8b909a;
+    --shadow:0 1px 3px rgba(0,0,0,.5),0 1px 2px rgba(0,0,0,.35);
+    --panel:#1a1e27; --hover:#1c212b; --row-line:#20242e;
+    --tag-bg:rgba(99,102,241,.18); --tag-text:#a5b4fc;
+    --chip-active-bg:#e8eaed; --chip-active-text:#111;
+    --chart-grid:#242a35; --heat-empty:#232833;
+    --h1:#173a2b; --h2:#14532d; --h3:#22c55e; --h4:#4ade80;
+    --pill-amber-bg:rgba(245,158,11,.16); --pill-amber-text:#fbbf24;
+    --hit-hi-bg:rgba(16,185,129,.2); --hit-hi-text:#6ee7b7;
+    --hit-mid-bg:rgba(245,158,11,.18); --hit-mid-text:#fcd34d;
+    --hit-none-bg:rgba(139,144,154,.16); --hit-none-text:#9aa0a8;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
@@ -22,16 +45,16 @@
   .brand{font-weight:800;letter-spacing:.06em;font-size:15px;text-transform:uppercase}
   .head-right{display:flex;align-items:center;gap:10px}
   .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
-        border-radius:999px;padding:6px 12px;font-size:12.5px;background:#fff;cursor:pointer}
-  .pill.active{background:#111;color:#fff;border-color:#111}
+        border-radius:999px;padding:6px 12px;font-size:12.5px;background:var(--card);cursor:pointer}
+  .pill.active{background:var(--chip-active-bg);color:var(--chip-active-text);border-color:var(--chip-active-bg)}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
   .updated{color:var(--muted);font-size:12px;text-align:right;margin-bottom:12px}
 
   .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
   .tabs{display:flex;gap:8px}
-  .tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 16px;
+  .tab{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 16px;
        font-size:13px;cursor:pointer}
-  .tab.active{background:#111;color:#fff;border-color:#111}
+  .tab.active{background:var(--chip-active-bg);color:var(--chip-active-text);border-color:var(--chip-active-bg)}
 
   .grid{display:grid;gap:14px;margin-bottom:14px}
   .g2{grid-template-columns:1fr 1fr}
@@ -60,24 +83,24 @@
   .chart-box{height:280px;position:relative}
 
   .heat{display:grid;grid-template-columns:repeat(52,1fr);gap:2px}
-  .heat i{aspect-ratio:1;border-radius:2px;background:#eceef2;display:block}
-  .heat i.l1{background:#d7f5e9} .heat i.l2{background:#9ae6c6}
-  .heat i.l3{background:#4ade80} .heat i.l4{background:#16a34a}
+  .heat i{aspect-ratio:1;border-radius:2px;background:var(--heat-empty);display:block}
+  .heat i.l1{background:var(--h1)} .heat i.l2{background:var(--h2)}
+  .heat i.l3{background:var(--h3)} .heat i.l4{background:var(--h4)}
 
   table{width:100%;border-collapse:collapse;font-size:13px}
   th{text-align:left;color:var(--muted);font-weight:500;padding:8px 10px;
      border-bottom:1px solid var(--line);font-size:12px}
-  td{padding:9px 10px;border-bottom:1px solid #f2f4f7}
+  td{padding:9px 10px;border-bottom:1px solid var(--row-line)}
   tr:last-child td{border-bottom:none}
   .num{text-align:right;font-variant-numeric:tabular-nums}
-  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;background:#eef2ff;color:#4338ca}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;background:var(--tag-bg);color:var(--tag-text)}
   .empty{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
 
   /* 调用明细 */
   .filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
   .filterbar .pill{padding:7px 12px;font-size:12.5px}
   .filterbar input.pill{width:170px;outline:none;font-family:inherit}
-  .summarybar{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;background:#f8f9fb;
+  .summarybar{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;background:var(--panel);
               border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px;
               font-size:12.5px;color:var(--muted)}
   .summarybar b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
@@ -85,10 +108,10 @@
          font-weight:600;font-variant-numeric:tabular-nums;vertical-align:1px}
   .cellsub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap}
   tr.log-row{cursor:pointer}
-  tr.log-row:hover td{background:#fafbfd}
+  tr.log-row:hover td{background:var(--hover)}
   tr.log-detail{display:none}
   tr.log-detail.open{display:table-row}
-  tr.log-detail td{background:#f8f9fb;padding:0;border-bottom:1px solid var(--line)}
+  tr.log-detail td{background:var(--panel);padding:0;border-bottom:1px solid var(--line)}
   tr.log-row.expanded td{border-bottom-color:transparent}
   .log-bill{padding:12px 18px 14px;min-width:0}
   .bill-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:12.5px;
@@ -102,7 +125,7 @@
 
   /* 额度（紧凑卡片）：多列瀑布式——最高的渠道独占左列，其余按高度自动堆到右列 */
   #quota-groups{columns:2;column-gap:12px}
-  .quota-card{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;padding:10px 14px;
+  .quota-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;
               min-width:0;break-inside:avoid;page-break-inside:avoid;margin-bottom:12px}
   .quota-title{font-weight:700;font-size:13px;margin-bottom:2px}
   .quota-acct{color:var(--muted);font-size:11.5px;margin:6px 0 3px}
@@ -113,6 +136,10 @@
   .qtable.qfix td:nth-child(4), .qtable.qfix th:nth-child(4){text-align:right}
   @media(max-width:900px){#quota-groups{columns:1}}
 
+  .hit-hi{background:var(--hit-hi-bg);color:var(--hit-hi-text)}
+  .hit-mid{background:var(--hit-mid-bg);color:var(--hit-mid-text)}
+  .hit-none{background:var(--hit-none-bg);color:var(--hit-none-text)}
+
   /* 额度告警横幅 */
   .alertbar{display:none;background:var(--card);border-radius:14px;padding:14px 18px;
             box-shadow:var(--shadow);margin-bottom:14px;border-left:4px solid var(--orange)}
@@ -120,7 +147,7 @@
   .alertbar.critical{border-left-color:var(--red)}
   .alertbar-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px}
   .alertbar-head .cnt{font-weight:600;font-size:12px;color:var(--muted)}
-  .alertrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #f2f4f7;font-size:13px}
+  .alertrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--row-line);font-size:13px}
   .alertrow:first-of-type{border-top:none}
   .alertrow .lvl{width:8px;height:8px;border-radius:50%;flex:none}
   .alertrow .lvl.critical{background:var(--red)}
@@ -146,6 +173,7 @@
       <span class="pill"><span class="dot"></span><span id="status" data-i18n="st.connecting">连接中</span></span>
       <span class="pill active" data-lang="zh">中</span>
       <span class="pill" data-lang="en">EN</span>
+      <span class="pill" id="theme-toggle" title="Theme">🌙</span>
     </div>
   </header>
 
@@ -255,7 +283,7 @@
           <i style="width:9px;height:9px;border-radius:2px;background:#10b981;display:inline-block"></i><span data-i18n="htl.l_ok">成功</span>
           <i style="width:9px;height:9px;border-radius:2px;background:#f59e0b;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_part">部分失败</span>
           <i style="width:9px;height:9px;border-radius:2px;background:#ef4444;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_all">全失败</span>
-          <i style="width:9px;height:9px;border-radius:2px;background:#eceef2;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_none">无请求</span>
+          <i style="width:9px;height:9px;border-radius:2px;background:var(--heat-empty);display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_none">无请求</span>
         </span>
       </div>
     </div>
@@ -306,11 +334,11 @@
     <div id="heatmap" style="overflow-x:auto;padding-bottom:8px"></div>
     <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:#8b909a">
       <span>少</span>
-      <i style="width:11px;height:11px;border-radius:2px;background:#eceef2;display:inline-block"></i>
-      <i style="width:11px;height:11px;border-radius:2px;background:#d7f5e9;display:inline-block"></i>
-      <i style="width:11px;height:11px;border-radius:2px;background:#9ae6c6;display:inline-block"></i>
-      <i style="width:11px;height:11px;border-radius:2px;background:#4ade80;display:inline-block"></i>
-      <i style="width:11px;height:11px;border-radius:2px;background:#16a34a;display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:var(--heat-empty);display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:var(--h1);display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:var(--h2);display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:var(--h3);display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:var(--h4);display:inline-block"></i>
       <span>多</span>
     </div>
   </div>
@@ -452,6 +480,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 function fmt(n){
   n = Number(n) || 0;
@@ -701,7 +730,7 @@ function renderHeatmap(days){
     for (const c of week) {
       const title = `${c.date}  ${c.tokens.toLocaleString()} tokens`;
       html += `<i class="l${c.level}" title="${title}" style="width:100%;aspect-ratio:1;border-radius:2px;display:block;background:${
-        ['#eceef2','#d7f5e9','#9ae6c6','#4ade80','#16a34a'][c.level]
+        [cssv('--heat-empty'),cssv('--h1'),cssv('--h2'),cssv('--h3'),cssv('--h4')][c.level]
       }"></i>`;
     }
     html += `</div>`;
@@ -713,6 +742,9 @@ function renderHeatmap(days){
 async function loadTrendCharts(){
   const range = $('range').value;
   const bucket = ['today','1d','7d'].includes(range) ? 'hour' : 'day';
+  // 图表全局配色跟随主题（重渲染时读取当前 CSS 变量）
+  Chart.defaults.color = cssv('--muted');
+  Chart.defaults.borderColor = cssv('--chart-grid');
 
   const ts = await fetch(`/api/timeseries?range=${range}&bucket=${bucket}`).then(r=>r.json());
   const labels = ts.map(t => bucket === 'hour' ? t.bucket.slice(11) : t.bucket.slice(5));
@@ -727,7 +759,7 @@ async function loadTrendCharts(){
     interaction: { mode: 'index', intersect: false },
     plugins: { legend: { display: false } },
     scales: {
-      y: { beginAtZero: true, grid: { color: '#f0f2f5' } },
+      y: { beginAtZero: true, grid: { color: cssv('--chart-grid') }, ticks: { color: cssv('--muted') } },
       x: { grid: { display: false }, ticks: { maxTicksLimit: 12, font: { size: 10 } } },
     },
   };
@@ -1076,7 +1108,7 @@ async function load(){
           const pct = w.remaining_pct;
           const lvl = w.level || 'ok';
           const color = pct==null ? '#8b909a' : pct<20 ? '#ef4444' : pct<50 ? '#f59e0b' : '#10b981';
-          const bar = pct!=null ? `<div style="background:#eceef2;border-radius:3px;height:5px;overflow:hidden">
+          const bar = pct!=null ? `<div style="background:var(--heat-empty);border-radius:3px;height:5px;overflow:hidden">
               <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div></div>` : '—';
           const val = pct!=null ? pct.toFixed(1)+'%'
             : (w.remaining_amt!=null ? (w.currency||'')+' '+w.remaining_amt.toFixed(2) : '—');
@@ -1163,6 +1195,7 @@ Object.assign(I18N_ZH, {
   'l.key': 'key', 'l.collector': '本地采集', 'l.estimated': '估算',
   'l.new': '新', 'l.write': '写', 'l.think': '含思考', 'l.ttft': '首字',
   'l.with_ttft': '含首字', 'l.total': '总',
+  'c.unit_tokens': '共 {0} tokens',
   'l.exporting': '导出中…',
   'b.input': '未命中新输入', 'b.cache_read': '缓存读取命中', 'b.cache_write': '缓存写入创建',
   'b.output': '模型生成输出', 'b.multiplier': '时段倍率', 'b.official_total': '官方牌价合计',
@@ -1317,6 +1350,23 @@ document.querySelectorAll('[data-lang]').forEach(pill => {
   };
 });
 
+// ====== 深色模式切换 ======
+let THEME = localStorage.getItem('ug_theme') || 'light';
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', THEME);
+  const btn = $('theme-toggle');
+  if (btn) btn.textContent = THEME === 'dark' ? '☀️' : '🌙';
+}
+$('theme-toggle').onclick = () => {
+  THEME = THEME === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('ug_theme', THEME);
+  applyTheme();
+  // 重渲染读取 CSS 变量的动态部分（图表网格/热力图/进度条）
+  if (currentTab === 'logs') { if (logsState.lastData) renderLogs(logsState.lastData); }
+  else load();
+};
+applyTheme();
+
 // ====== Tab 切换：概览 | 调用明细 ======
 let currentTab = 'overview';
 document.querySelectorAll('.tab[data-tab]').forEach(tab => {
@@ -1429,9 +1479,8 @@ function logRowHtml(x, i){
   const stColor = x.status < 400 ? 'var(--green)' : 'var(--red)';
   const prompt = x.prompt_tokens || 0;
   const hit = x.cache_rate || 0;
-  const hitBadge = prompt > 0
-    ? `<span class="badge" style="background:${hit >= 50 ? '#d1fae5' : hit > 0 ? '#fef3c7' : '#eceef2'};color:${hit >= 50 ? '#059669' : hit > 0 ? '#b45309' : '#8b909a'}">${hit}%</span>`
-    : '';
+  const hitCls = hit >= 50 ? 'hit-hi' : hit > 0 ? 'hit-mid' : 'hit-none';
+  const hitBadge = prompt > 0 ? `<span class="badge ${hitCls}">${hit}%</span>` : '';
   const cost = fmtCost(x.cost_usd);
   const saved = x.breakdown && x.breakdown.cache_saved_usd > 0 ? fmtCost(x.breakdown.cache_saved_usd) : null;
   // 大字 = 纯生成 tok/s（扣除首字等待）；小字附上含首字的总均值
