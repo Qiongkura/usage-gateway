@@ -1156,6 +1156,7 @@ Object.assign(I18N_ZH, {
   'l.unpriced': '未定价', 'l.unpriced_tip': '这些记录的模型不在价格表中',
   'l.key': 'key', 'l.collector': '本地采集', 'l.estimated': '估算',
   'l.new': '新', 'l.write': '写', 'l.think': '含思考', 'l.ttft': '首字',
+  'l.with_ttft': '含首字',
   'l.exporting': '导出中…',
   'b.input': '未命中新输入', 'b.cache_read': '缓存读取命中', 'b.cache_write': '缓存写入创建',
   'b.output': '模型生成输出', 'b.multiplier': '时段倍率', 'b.official_total': '官方牌价合计',
@@ -1259,6 +1260,7 @@ const I18N_EN = {
   'l.unpriced_tip': 'Models missing from the price table',
   'l.key': 'key', 'l.collector': 'collector', 'l.estimated': 'estimated',
   'l.new': 'new', 'l.write': 'write', 'l.think': 'thinking', 'l.ttft': 'TTFT',
+  'l.with_ttft': 'with TTFT',
   'l.exporting': 'Exporting…',
   'b.input': 'New (uncached) input', 'b.cache_read': 'Cache read (hit)',
   'b.cache_write': 'Cache write (creation)', 'b.output': 'Output generation',
@@ -1424,9 +1426,12 @@ function logRowHtml(x, i){
     : '';
   const cost = fmtCost(x.cost_usd);
   const saved = x.breakdown && x.breakdown.cache_saved_usd > 0 ? fmtCost(x.breakdown.cache_saved_usd) : null;
-  const speed = x.tok_per_sec != null ? x.tok_per_sec.toFixed(1) : '—';
-  const speedColor = x.tok_per_sec == null ? 'var(--muted)'
-    : x.tok_per_sec >= 40 ? 'var(--green)' : x.tok_per_sec >= 15 ? 'var(--orange)' : 'var(--red)';
+  // 大字 = 纯生成 tok/s（扣除首字等待）；小字附上含首字的总均值
+  const speed = x.gen_tok_per_sec != null ? x.gen_tok_per_sec.toFixed(1)
+    : x.tok_per_sec != null ? x.tok_per_sec.toFixed(1) : '—';
+  const speedVal = x.gen_tok_per_sec != null ? x.gen_tok_per_sec : x.tok_per_sec;
+  const speedColor = speedVal == null ? 'var(--muted)'
+    : speedVal >= 40 ? 'var(--green)' : speedVal >= 15 ? 'var(--orange)' : 'var(--red)';
   const lat = x.latency_ms != null
     ? (x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1)+'s' : Math.round(x.latency_ms)+'ms')
     : '—';
@@ -1448,7 +1453,7 @@ function logRowHtml(x, i){
     <td class="num">${fmt(x.output_tokens || 0)}${x.reasoning ? `<div class="cellsub">${t('l.think')} ${fmt(x.reasoning)}</div>` : ''}</td>
     <td class="num" style="font-weight:600">${fmt(x.total_tokens || 0)}</td>
     <td class="num cost">${cost ?? '—'}${saved ? `<div class="cellsub" style="color:var(--green)">${t('l.saved')} ${saved}</div>` : ''}</td>
-    <td class="num"><span style="color:${speedColor};font-weight:600">${speed}</span><div class="cellsub">${t('l.ttft')} ${ttft} · ${lat}</div></td>
+    <td class="num"><span style="color:${speedColor};font-weight:600">${speed}</span><div class="cellsub">${t('l.ttft')} ${ttft} · ${lat} · ${t('l.with_ttft')} ${x.tok_per_sec != null ? x.tok_per_sec.toFixed(1) : '—'}</div></td>
   </tr>
   <tr class="log-detail" id="log-detail-${i}"><td colspan="9"><div class="log-bill"></div></td></tr>`;
 }
