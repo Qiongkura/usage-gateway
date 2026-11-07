@@ -34,6 +34,21 @@
     --hit-mid-bg:rgba(245,158,11,.18); --hit-mid-text:#fcd34d;
     --hit-none-bg:rgba(139,144,154,.16); --hit-none-text:#9aa0a8;
   }
+  /* 暖纸色编辑风（Anthropic / CodeYear 同源）：米黄纸底 + 暖黑 + 陶土红点缀 */
+  html[data-theme="warm"]{
+    color-scheme: light;
+    --bg:#f5f2e9; --card:#fbf9f3; --line:#d8d2c2; --text:#141413; --muted:#6f6a5e;
+    --shadow:0 1px 3px rgba(61,61,58,.08),0 1px 2px rgba(61,61,58,.05);
+    --panel:#efece1; --hover:#f0ecdf; --row-line:#e3ddcd;
+    --tag-bg:rgba(200,85,47,.12); --tag-text:#a8431f;
+    --chip-active-bg:#141413; --chip-active-text:#f5f2e9;
+    --chart-grid:#d8d2c2; --heat-empty:#e7e2d3;
+    --h1:#eeddc8; --h2:#dcac83; --h3:#c8552f; --h4:#a8431f;
+    --pill-amber-bg:rgba(200,85,47,.13); --pill-amber-text:#a8431f;
+    --hit-hi-bg:rgba(200,85,47,.14); --hit-hi-text:#a8431f;
+    --hit-mid-bg:rgba(200,85,47,.09); --hit-mid-text:#c06a3f;
+    --hit-none-bg:rgba(111,106,94,.12); --hit-none-text:#6f6a5e;
+  }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
@@ -1350,15 +1365,25 @@ document.querySelectorAll('[data-lang]').forEach(pill => {
   };
 });
 
-// ====== 深色模式切换 ======
+// ====== 主题切换：浅色 → 深色 → 暖纸（Anthropic/CodeYear 风）循环 ======
+const THEMES = [
+  { id: 'light', icon: '☀️', label: '浅色' },
+  { id: 'dark',  icon: '🌙', label: '深色' },
+  { id: 'warm',  icon: '🍂', label: '暖纸' },
+];
 let THEME = localStorage.getItem('ug_theme') || 'light';
 function applyTheme(){
+  if (!THEMES.some(t => t.id === THEME)) THEME = 'light';
   document.documentElement.setAttribute('data-theme', THEME);
   const btn = $('theme-toggle');
-  if (btn) btn.textContent = THEME === 'dark' ? '☀️' : '🌙';
+  if (btn) {
+    btn.textContent = THEMES.find(t => t.id === THEME).icon;
+    btn.title = '主题：' + THEMES.find(t => t.id === THEME).label + '（点击切换）';
+  }
 }
 $('theme-toggle').onclick = () => {
-  THEME = THEME === 'dark' ? 'light' : 'dark';
+  const i = THEMES.findIndex(t => t.id === THEME);
+  THEME = THEMES[(i + 1) % THEMES.length].id;
   localStorage.setItem('ug_theme', THEME);
   applyTheme();
   // 重渲染读取 CSS 变量的动态部分（图表网格/热力图/进度条）
