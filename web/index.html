@@ -1135,7 +1135,7 @@ async function load(){
           const badge = lvl==='critical' ? ` <span style="color:#ef4444;font-size:10.5px">${t('q.critical')}</span>`
             : lvl==='warn' ? ` <span style="color:#f59e0b;font-size:10.5px">${t('q.warn')}</span>` : '';
           quotaHtml += `<tr class="${rowCls}"><td>${w.window||'—'}${badge}</td><td>${bar}${burn}</td>
-            <td class="num" style="color:${color};font-weight:600">${val}${burn}</td>
+            <td class="num" style="color:${color};font-weight:600">${val}</td>
             <td style="color:#8b909a;font-size:11px;white-space:nowrap">${fmtTime(w.resets_at)}</td></tr>`;
         }
         quotaHtml += `</tbody></table>`;
