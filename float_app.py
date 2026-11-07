@@ -10,10 +10,15 @@
 - js_api                    页面上 📌 置顶锁定 / ✕ 关闭，全部真生效
 """
 import ctypes
+import sys
 import time
 import ctypes.wintypes as wintypes
 
 import webview
+
+# 单实例：已有一个 tok/s 窗口时直接退出，避免连点叠窗
+if ctypes.windll.user32.FindWindowW(None, "tok/s"):
+    sys.exit(0)
 
 HWND_TOPMOST = -1
 HWND_NOTOPMOST = -2
