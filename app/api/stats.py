@@ -481,10 +481,15 @@ def speed(request: Request, limit: int = 20):
         item = dict(r)
         sec = r["latency_ms"] / 1000
         item["tok_per_sec"] = round(r["output_tokens"] / sec, 2) if sec > 0 else 0
-        # 首 token 之后的速度（更接近真实生成速率）
+        # 首 token 之后的速度（更接近真实生成速率）。
+        # 生成窗口 < 0.5s 时整段响应是一瞬间到达的（上游缓冲/模型爆发），
+        # 该速率不可信，退回含首字的总体均值。
         if r["ttft_ms"] and r["latency_ms"] > r["ttft_ms"]:
             gen_sec = (r["latency_ms"] - r["ttft_ms"]) / 1000
-            item["gen_tok_per_sec"] = round(r["output_tokens"] / gen_sec, 2) if gen_sec > 0 else 0
+            if gen_sec >= 0.5:
+                item["gen_tok_per_sec"] = round(r["output_tokens"] / gen_sec, 2)
+            else:
+                item["gen_tok_per_sec"] = item["tok_per_sec"]
         else:
             item["gen_tok_per_sec"] = item["tok_per_sec"]
         out.append(item)
@@ -693,8 +698,10 @@ def logs(
         # 速度：与 /api/speed 同一口径（tok/s 与首字后的纯生成 tok/s）
         sec = (item["latency_ms"] or 0) / 1000
         item["tok_per_sec"] = round(out_tok / sec, 2) if sec > 0 else None
+        # 纯生成速率（扣除首字）。生成窗口 < 0.5s 时整段响应是一瞬间到达的
+        # （上游缓冲/模型爆发），速率不可信，退回含首字的总体均值
         gen_sec = ((item["latency_ms"] or 0) - (item["ttft_ms"] or 0)) / 1000
-        if item["ttft_ms"] and gen_sec > 0:
+        if item["ttft_ms"] and gen_sec >= 0.5:
             item["gen_tok_per_sec"] = round(out_tok / gen_sec, 2)
         else:
             item["gen_tok_per_sec"] = item["tok_per_sec"]
