@@ -56,6 +56,9 @@ upstreams:
     type: openai
     base_url: https://api.mistral.ai/v1
     api_key: ""          # 填入你的 Mistral key
+    # 同渠道多 key 轮换：api_key 优先，402/429 时按 api_keys 顺序切下一个，
+    # 用尽的 key 冷却 15 分钟后自动恢复。
+    # api_keys: ["sk-aaa", "sk-bbb"]
     models:
       - mistral-large-latest
       - mistral-medium-latest

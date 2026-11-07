@@ -37,11 +37,15 @@ token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细
 
 ![额度](docs/screenshots/quota.png)
 
+**暖纸主题（浅色 / 深色 / 暖纸三套主题一键切换）**
+
+![暖纸主题](docs/screenshots/theme-warm.png)
+
 **链路追踪：每笔请求各阶段耗时，排查慢请求**
 
 ![链路追踪](docs/screenshots/traces.png)
 
-**tok/s 液态玻璃悬浮小窗（无边框、真置顶）：实时生成速度 + 最近一笔的 token 与费用**
+**tok/s 悬浮小窗（无边框、真置顶、可拖动 / 锁定 / 关闭）：实时生成速度 + 最近一笔的 token 与费用**
 
 ![悬浮窗](docs/screenshots/float-final.png)
 
@@ -56,20 +60,27 @@ token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细
   严格 schema 上游的参数白名单 / 改名、流式自动注入 `include_usage`、
   不支持流式的上游自动降级非流式再包装成 SSE
 - 上游连接池复用（保活 5 分钟），交互式使用首字延迟更低
+- 上游多 key 轮换：402 / 429 自动切到下一个 key，15 分钟冷却后恢复；单 key 配置完全兼容
+- 每周自动探测各上游可用模型并热应用（失效模型自动隐藏，无需重启）
 
 **计量与账本**
 - 每一笔调用记录：未命中输入 / 缓存读 / 缓存写 / 输出（含思考 token）/ 状态码 / 首字与总耗时 / tok/s
 - 单次费用 + 点开展开**分项账单**：输入费 + 缓存读费 + 缓存写费 + 输出费 × 时段倍率，
   以及**这一次缓存帮你省了多少钱**
 - 看板「调用明细」Tab：多维筛选（时间 / 渠道 / Key / 来源 / 状态 / 模型搜索）、
-  筛选集汇总条、分页、CSV 导出、自动刷新；中 / EN 双语切换
+  筛选集汇总条、分页、CSV 导出、自动刷新
 - 成本一律按官方 API 原价折算；订阅 / 免费渠道只打标签，token 价值照常统计
 - 上游自报成本（如 Zen 的 `list_cost`）优先采用；历史记录价格变更后可回填
+- 每日自动滚动备份数据库（`VACUUM INTO`，保留 7 份）
 
 **看板**
 - 汇总卡片、Token 构成 / 成本 / 请求趋势图、365 天活跃热力图、请求健康时间线
 - 额度 / 余额紧凑卡片（多渠道多账号窗口）、额度告警（桌面通知 + webhook，状态机 + 冷却防刷屏）
+- **燃烧率预测**：按各窗口自己的周期算「百分点 / 小时」，结合重置时间给出「重置前预计剩余」；
+  只有预计真的会在重置前耗尽，才显示「约 N 小时 / 天后耗尽」并提前预警。
+  5h / 周 / 月窗口不再拿百分比硬折天数（5h 剩 99% 不代表还能用几十天）
 - 请求链路追踪（阶段耗时瀑布）、实时 tok/s 悬浮小窗（无边框置顶原生窗，`/float`）
+- 浅色 / 深色 / 暖纸三套主题 + 中 / EN 双语，选择本地持久化
 
 **采集器体系**（只读，不碰上游数据）
 - Antigravity Tools（SQLite token 用量 + 各账号额度窗口）
@@ -143,6 +154,7 @@ export ANTHROPIC_API_KEY=sk-gw-default-0001
 | `gateway.client_keys[].allow_models` | 给每个客户端 key 设模型白名单（比如只许用便宜模型） |
 | `upstreams[].alias` | 模型前缀别名，`alias: opgo` → 客户端写 `opgo/kimi-k3` |
 | `upstreams[].billing_mode` | `payg` 按量 / `subscription` 订阅（等效价值）/ `free` |
+| `upstreams[].api_keys` | 同渠道多 key：`api_key` 优先，402 / 429 时按顺序切下一个，冷却 15 分钟 |
 | `upstreams[].no_proxy` | 本地上游直连，不走全局代理 |
 | `proxy` | 访问境外上游用的代理，留空读环境变量 |
 | `failover` / `retry_rounds` | 故障转移，默认**关闭**（失败立即报错，不静默换渠道） |
@@ -175,9 +187,13 @@ Prompt cache 对长上下文成本影响巨大（实测同一场景差 30~55 倍
 | `GET /api/usage?group_by=model\|source\|account\|client_key` | 分组统计 |
 | `GET /api/timeseries?bucket=hour\|day` | 时间序列 |
 | `GET /api/costs` / `GET /api/pricing` | 成本明细 / 当前价格表 |
+| `GET /api/speed` | 最近调用速度明细（纯生成 tok/s、首字、总耗时） |
+| `GET /api/heatmap` / `GET /api/health-timeline` | 365 天热力图 / 请求健康时间线 |
 | `GET /api/traces` / `GET /api/traces/{id}` | 链路追踪 |
-| `GET /api/quota` / `GET /api/alerts` | 额度快照 / 告警状态 |
+| `GET /api/quota` / `GET /api/alerts` | 额度快照（含燃烧率预测）/ 告警状态 |
+| `GET /api/balance` / `GET /api/models/active` / `GET /api/routes` | 余额 / 活跃模型 / 路由表 |
 | `GET /api/upstreams/health` | 上游健康与熔断状态 |
+| `POST /api/upstreams/{name}/reset` | 手动重置某个上游的熔断 |
 | `POST /api/admin/checkpoint` / `POST /api/admin/shutdown` | 优雅落盘 / 关闭（可选 admin_key） |
 
 `/api/logs` 常用参数：`range`、`source`、`model`（模糊）、`client_key`、
@@ -192,12 +208,17 @@ app/
   pricing.py         # 价格表 + 单次费用分项拆解（含时段倍率、缓存节省额）
   db.py              # SQLite（WAL）：用量 / 额度 / 链路 / 水位线 / 保留清理
   api/stats.py       # 统计 API（含 /api/logs 账本）
+  scheduler.py       # 定时采集、清理 / 备份、燃烧率计算、每周模型探测
+  probe_models.py    # 上游模型可用性探测（结果热应用）
   collectors/        # 只读采集器（额度 + 本地客户端日志）
   alerts.py          # 告警状态机与通知渠道
   health.py          # 熔断与负载均衡
   tracing.py         # 请求链路
-web/                 # 零依赖单页看板（Chart.js 本地打包）
-tests/               # 单元测试（兼容层 / 账本 API / 维护功能）
+  float_app.py       # tok/s 悬浮窗（pywebview 无边框原生窗）
+web/                 # 零依赖单页看板（Chart.js 本地打包，三套主题）
+tests/               # 单元测试（兼容层 / 账本 / 燃烧率 / 维护功能）
+Dockerfile           # uv 基础镜像 + 健康检查
+docker-compose.yml   # 数据 / 配置 / 日志挂载
 ```
 
 ## 测试
@@ -206,12 +227,14 @@ tests/               # 单元测试（兼容层 / 账本 API / 维护功能）
 python -m unittest discover -s tests
 ```
 
-覆盖：SSE 兼容归一化（跨 TCP 分片、空预热帧、数组 content、tool_calls 分片）、
-请求体改写、`/api/logs` 账本与费用补算、价格分项、保留清理、vibe 增量采集、管理鉴权。
+42 个用例，覆盖：SSE 兼容归一化（跨 TCP 分片、空预热帧、数组 content、tool_calls 分片）、
+请求体改写、`/api/logs` 账本与费用补算、价格分项、多 key 轮换、流式代理、
+燃烧率预测与重置前预警、保留清理 / 备份、vibe 增量采集、管理鉴权。
 
 ## 已知限制
 
 - 同名模型按配置顺序取第一个上游；流式 usage 依赖上游返回，个别上游不回 token 时按启发式估算并打「估算」标记
+- 燃烧率是「按最近一段样本线性外推」，突发流量下只作参考；有重置时间的窗口会同时给出重置前预计值
 - 看板 / `/api` 无用户体系，按单机自用设计；对外暴露请自行加反代认证
 - Windows 下开发为主，Linux/macOS 理论可用（桌面通知仅 Windows）
 
