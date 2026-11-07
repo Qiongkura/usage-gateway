@@ -1442,11 +1442,6 @@ function logRowHtml(x, i){
   const ttft = x.ttft_ms != null
     ? (x.ttft_ms >= 1000 ? (x.ttft_ms/1000).toFixed(1)+'s' : Math.round(x.ttft_ms)+'ms')
     : '—';
-  // 服务端在生成窗口 < 0.5s 时会把 gen 退回总体均值——此时小字不再重复「含首字」
-  const fallback = x.gen_tok_per_sec != null && x.tok_per_sec != null
-    && Math.abs(x.gen_tok_per_sec - x.tok_per_sec) < 0.005;
-  const withTtft = !fallback && x.tok_per_sec != null
-    ? ` · ${t('l.with_ttft')} ${x.tok_per_sec.toFixed(1)}` : '';
   const subBits = [
     x.client_key ? `${t('l.key')} ${x.client_key}` : t('l.collector'),
     t('mode.' + (x.billing_mode || 'payg')),
@@ -1464,7 +1459,7 @@ function logRowHtml(x, i){
     <td class="num">${fmt(x.output_tokens || 0)}${x.reasoning ? `<div class="cellsub">${t('l.think')} ${fmt(x.reasoning)}</div>` : ''}</td>
     <td class="num" style="font-weight:600">${fmt(x.total_tokens || 0)}</td>
     <td class="num cost">${cost ?? '—'}${saved ? `<div class="cellsub" style="color:var(--green)">${t('l.saved')} ${saved}</div>` : ''}</td>
-    <td class="num"><span style="color:${speedColor};font-weight:600">${speed}</span><div class="cellsub">${t('l.ttft')} ${ttft} · ${t('l.total')} ${lat}${withTtft}</div></td>
+    <td class="num"><span style="color:${speedColor};font-weight:600">${speed}</span><div class="cellsub">${t('l.ttft')} ${ttft} · ${t('l.total')} ${lat}</div></td>
   </tr>
   <tr class="log-detail" id="log-detail-${i}"><td colspan="9"><div class="log-bill"></div></td></tr>`;
 }
