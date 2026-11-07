@@ -705,6 +705,22 @@ def record_from_usage(
 # 400/401/403/404/422 属于请求参数/客户端错误，绝不触发上游冷却熔断）
 RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 529}
 
+# key 额度耗尽/被限流的冷却时长：期间优先用下一个 key，到期后再试主 key
+KEY_COOLDOWN_SEC = 900
+_KEY_COOLDOWN: dict[str, float] = {}
+
+
+def _key_id(up: Upstream, key: str) -> str:
+    return f"{up.name}|{key[-6:]}"
+
+
+def _key_chain(up: Upstream) -> list[str]:
+    """按优先级取 key：跳过冷却中的；全部冷却时退回主 key 再试一次。"""
+    keys = up.effective_keys
+    now = time.time()
+    fresh = [k for k in keys if _KEY_COOLDOWN.get(_key_id(up, k), 0.0) <= now]
+    return fresh or keys[:1]
+
 
 def _conversation_key(
     body: bytes, client_key: str, payload: dict[str, Any] | None = None,
@@ -755,6 +771,7 @@ def _build_headers(
     body: bytes = b"",
     payload: dict[str, Any] | None = None,
     path: str = "",
+    api_key_override: str | None = None,
 ) -> dict[str, str]:
     headers = {
         k: v
@@ -764,10 +781,11 @@ def _build_headers(
             "accept-encoding",  # 由 httpx 自己协商，避免解压错乱
         }
     }
-    if upstream.api_key:
-        headers["authorization"] = f"Bearer {upstream.api_key}"
+    api_key = api_key_override if api_key_override is not None else upstream.api_key
+    if api_key:
+        headers["authorization"] = f"Bearer {api_key}"
         if "/messages" in path:
-            headers["x-api-key"] = upstream.api_key
+            headers["x-api-key"] = api_key
             if not any(k.lower() == "anthropic-version" for k in headers):
                 headers["anthropic-version"] = "2023-06-01"
 
@@ -1083,9 +1101,11 @@ async def forward_with_failover(
         remaining = len(queue) - idx - 1
         attempted.append(upstream.name)
         url = f"{upstream.base_url}{path}"
+        key_chain = _key_chain(upstream)
         headers = _build_headers(
             request, upstream, request_id, client_key_name, req_body,
             payload=parsed_payload, path=path,
+            api_key_override=key_chain[0],
         )
         client = await async_http_client(cfg.proxy_for(upstream))
         started = time.perf_counter()
@@ -1133,6 +1153,56 @@ async def forward_with_failover(
         # 拿到响应了
         latency = (time.perf_counter() - started) * 1000
         status = resp.status_code
+
+        # 额度耗尽/被限流（402/429）：同一上游换下一个 key 重发（不算跨上游 failover）
+        tried_keys = {key_chain[0]}
+        while status in (402, 429):
+            nxt = next((k for k in _key_chain(upstream) if k not in tried_keys), None)
+            if nxt is None:
+                break
+            _KEY_COOLDOWN[_key_id(upstream, key_chain[0])] = time.time() + KEY_COOLDOWN_SEC
+            log.warning(
+                "[%s] %s key ...%s hit %d, switching to next key ...%s (cooldown %ds)",
+                request_id[:8], upstream.name, key_chain[0][-6:], status,
+                nxt[-6:], KEY_COOLDOWN_SEC,
+            )
+            try:
+                if use_stream:
+                    await resp.aclose()
+                else:
+                    await resp.aread()
+                    await resp.aclose()
+            except Exception:
+                pass
+            tried_keys.add(nxt)
+            key_chain = [nxt] + [k for k in key_chain if k != nxt]
+            headers = _build_headers(
+                request, upstream, request_id, client_key_name, req_body,
+                payload=parsed_payload, path=path, api_key_override=nxt,
+            )
+            started = time.perf_counter()
+            try:
+                if use_stream:
+                    req = client.build_request(
+                        request.method, url, headers=headers, content=req_body,
+                        params=request.query_params,
+                    )
+                    resp = await client.send(req, stream=True)
+                else:
+                    resp = await client.request(
+                        request.method, url, headers=headers, content=req_body,
+                        params=request.query_params,
+                    )
+                status = resp.status_code
+                latency = (time.perf_counter() - started) * 1000
+            except httpx.HTTPError as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                last_status = 502
+                trace.end_current(error=last_error)
+                if tracker is not None:
+                    tracker.record_failure(upstream.name, last_error)
+                status = last_status
+                break
 
         # 自愈：如果上游因不支持 reasoning_effort 返回 400/422，自动剥离 reasoning_effort 就地重发一次
         if status in (400, 422) and b"reasoning_effort" in req_body:

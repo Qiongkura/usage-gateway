@@ -30,6 +30,9 @@ class Upstream:
     type: str
     base_url: str
     api_key: str
+    # 备用 key 链（按优先级）：api_key 之外还可以配多个 key。
+    # 主 key 返回 402/429（额度耗尽/限流）时，同一上游自动换下一个 key 重发。
+    api_keys: list[str] = field(default_factory=list)
     models: list[str] = field(default_factory=list)
     usage_source: dict[str, Any] = field(default_factory=dict)
     balance: dict[str, Any] = field(default_factory=dict)
@@ -75,6 +78,17 @@ class Upstream:
     @property
     def prefix(self) -> str:
         return self.alias or self.name
+
+    @property
+    def effective_keys(self) -> list[str]:
+        """按优先级排列的全部可用 key（api_key 在前，api_keys 去重后追加）。"""
+        keys: list[str] = []
+        if self.api_key:
+            keys.append(self.api_key)
+        for k in self.api_keys:
+            if k and k not in keys:
+                keys.append(k)
+        return keys or [self.api_key]
 
     def matches(self, model: str) -> bool:
         return model in self.all_models
@@ -261,6 +275,7 @@ def load_config(path: str | Path | None = None) -> Config:
                 type=str(item.get("type") or "openai"),
                 base_url=str(item["base_url"]).rstrip("/"),
                 api_key=str(item.get("api_key") or ""),
+                api_keys=[str(k) for k in (item.get("api_keys") or []) if k],
                 models=list(item.get("models") or []),
                 usage_source=dict(item.get("usage_source") or {}),
                 balance=dict(item.get("balance") or {}),
