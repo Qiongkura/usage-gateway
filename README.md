@@ -1,5 +1,7 @@
 # Usage Gateway
 
+[English](README.en.md)
+
 本地优先的多上游 LLM 网关：**客户端只认你发的 key，上游 key 永不外泄**；每一次调用的
 token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细」账本的 Web 看板。
 

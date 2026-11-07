@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Iterable
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -24,6 +26,8 @@ class Scheduler:
         alerter: QuotaAlerter | None = None,
         retention_days: int = 365,
         prices: Any = None,
+        cfg: Any = None,
+        probe_days: int = 7,
     ):
         self.store = store
         self.collectors = collectors
@@ -33,6 +37,10 @@ class Scheduler:
         self.retention_days = max(0, int(retention_days or 0))
         # 价格表：采集器入库的记录没有成本，这里按官方价补算
         self.prices = prices
+        # 配置引用：自动探测模型后热应用可用性
+        self.cfg = cfg
+        # 模型可用性自动探测间隔（天，0 = 关闭）
+        self.probe_days = max(0, int(probe_days or 0))
         self.sched = BackgroundScheduler(timezone="Asia/Shanghai")
 
     def start(self) -> None:
@@ -103,6 +111,26 @@ class Scheduler:
                     log.info("[backup] database snapshot -> %s", backup.name)
             except Exception:
                 log.exception("database backup failed")
+
+            # 每周自动探测模型可用性，结果热应用到运行中的网关（无需重启）
+            if self.probe_days > 0 and now - getattr(self, "_last_probe", 0) > self.probe_days * 86400:
+                self._last_probe = now
+                threading.Thread(target=self._weekly_probe, daemon=True, name="probe").start()
+
+    def _weekly_probe(self) -> None:
+        try:
+            from .probe_models import main as probe_main
+            from .config import apply_model_health, load_model_health
+
+            log.info("[probe] weekly model availability probe started")
+            probe_main()
+            health_file = Path(__file__).resolve().parent.parent / "model_health.json"
+            if self.cfg is not None and health_file.exists():
+                apply_model_health(self.cfg.upstreams, load_model_health(health_file))
+                hidden = sum(len(u.unavailable_models) for u in self.cfg.upstreams)
+                log.info("[probe] done, results applied (%d models hidden)", hidden)
+        except Exception:
+            log.exception("weekly probe failed")
 
     def _run_usage(self, c: Collector) -> None:
         since = self.store.watermark(c.name)

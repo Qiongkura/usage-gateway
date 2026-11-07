@@ -559,7 +559,7 @@ function renderHealthTimeline(data){
 
   const buckets = data.buckets || [];
   if (!buckets.length) {
-    grid.innerHTML = '<div class="empty">暂无数据</div>';
+    grid.innerHTML = `<div class="empty">${t('w.nodata')}</div>`;
     axis.innerHTML = '';
     return;
   }
@@ -616,7 +616,7 @@ function renderHealthTimeline(data){
   $('htl-bucket').textContent = bucketMin;
   const desc = document.querySelector('#htl-grid')?.closest('.section')?.querySelector('.desc');
   if (desc) {
-    desc.title = `每列 ${rows} 格 × ${bucketMin} 分钟 = ${colMin} 分钟，共 ${cols} 列`;
+    desc.title = t('htl.col_title', rows, bucketMin, colMin, cols);
   }
 }
 
@@ -682,7 +682,9 @@ function renderHeatmap(days){
   const weeks = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i+7));
 
-  const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const monthNames = LANG === 'en'
+    ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    : ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
   // 列宽弹性伸缩，铺满容器宽度
   let html = '<div style="display:flex;gap:3px;width:100%">';
   let lastMonth = -1;
@@ -903,10 +905,10 @@ async function load(){
     const mTokens = (sum.total_tokens || 0) / 1e6;
     if (mTokens > 0) {
       $('v-unit').textContent = '$' + (totalCost / mTokens).toFixed(2);
-      $('v-unit-sub').textContent = `共 ${fmt(sum.total_tokens)} tokens`;
+      $('v-unit-sub').textContent = t('c.unit_tokens', fmt(sum.total_tokens));
     } else {
       $('v-unit').textContent = '$0';
-      $('v-unit-sub').textContent = '暂无数据';
+      $('v-unit-sub').textContent = t('w.nodata');
     }
 
     const unpriced = sum.unpriced_requests || 0;
@@ -1186,10 +1188,12 @@ const I18N_EN = {
   'c.rpm_sub': 'requests / min', 'c.tpm_sub': 'tokens / min',
   'c.cache': 'Cache Rate', 'c.cache_sub': 'cache hit share',
   'c.tps': 'Gen Speed', 'c.cost': 'Total Cost (list)', 'c.unit': 'Avg Price',
+  'c.unit_tokens': '{0} tokens total',
   'c.unit_sub': 'per 1M tokens',
   's.htl': 'Request Health Timeline',
   's.htl_desc1': 'Last', 's.htl_desc2': ', each cell', 's.htl_desc3': 'min; read column by column, top to bottom then left to right',
   'htl.6h': '6 hours', 'htl.24h': '24 hours',
+  'htl.col_title': '{0} cells × {1} min = {2} min per column, {3} columns',
   'htl.l_ok': 'ok', 'htl.l_part': 'partial fail', 'htl.l_all': 'all fail', 'htl.l_none': 'idle',
   's.trend': 'Token Composition',
   's.trend_desc': 'Input / output / cache / reasoning tokens over time (stacked)',
