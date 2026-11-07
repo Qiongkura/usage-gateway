@@ -54,36 +54,6 @@
   }
   #win > * { position: relative; z-index: 1; }
 
-  #drag {
-    height: 30px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 8px 0 13px;
-    cursor: move;
-    flex-shrink: 0;
-  }
-  #drag .dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #10b981; flex: none;
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
-  }
-  #drag.err .dot { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.8); }
-  #title {
-    font-size: 9.5px; color: rgba(26, 29, 35, 0.62);
-    letter-spacing: .15em; font-weight: 700; flex: 1;
-  }
-  #btns { display: flex; gap: 4px; }
-  .btn {
-    width: 18px; height: 18px; border: none; border-radius: 6px;
-    background: rgba(255, 255, 255, 0.42); color: rgba(26, 29, 35, 0.62);
-    font-size: 10px; line-height: 1; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  }
-  .btn:hover { background: rgba(255, 255, 255, 0.75); color: #1a1d23; }
-  .btn.close:hover { background: #ef4444; color: #fff; }
-
   #main {
     flex: 1;
     display: flex;
@@ -165,22 +135,26 @@
     padding-bottom: 5px;
     flex-shrink: 0;
     font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+  }
+  #status .sdot {
+    width: 6px; height: 6px; border-radius: 50%; flex: none;
+    background: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
   }
   #status.err { color: #ef4444; }
+  #status.err .sdot {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+  }
   .idle #tps { color: rgba(26, 29, 35, 0.22); }
 </style>
 </head>
 <body>
 <div id="win">
-  <div id="drag">
-    <span class="dot"></span>
-    <span id="title">USAGE GATEWAY</span>
-    <div id="btns">
-      <button class="btn" id="btn-pin" title="置顶">📌</button>
-      <button class="btn close" id="btn-close" title="关闭">✕</button>
-    </div>
-  </div>
-
   <div id="main">
     <div id="tps">—</div>
     <div id="unit">TOK/S</div>
@@ -188,7 +162,7 @@
     <div id="meta">等待请求…</div>
   </div>
 
-  <div id="status">连接中…</div>
+  <div id="status"><span class="sdot"></span><span id="status-text">连接中…</span></div>
 </div>
 
 <script>
@@ -200,15 +174,13 @@ let history = [];
 try { history = JSON.parse(localStorage.getItem('ug_spark') || '[]'); } catch (e) { history = []; }
 if (!Array.isArray(history)) history = [];
 let lastTs = null;
-let pinned = true;
 let timer = null;
 
 const $ = id => document.getElementById(id);
 
 function setStatus(text, isErr) {
-  $('status').textContent = text;
+  $('status-text').textContent = text;
   $('status').className = isErr ? 'err' : '';
-  $('drag').className = isErr ? 'err' : '';
 }
 
 function renderSpark() {
@@ -313,35 +285,6 @@ function start() {
 function stop() {
   if (timer) { clearInterval(timer); timer = null; }
 }
-
-// 拖动窗口（浏览器里拖动整个窗口移动；作为独立窗口时由系统处理）
-let dragState = null;
-$('drag').addEventListener('mousedown', e => {
-  if (e.target.closest('.btn')) return;
-  dragState = { x: e.screenX, y: e.screenY };
-});
-window.addEventListener('mousemove', e => {
-  if (!dragState) return;
-  const dx = e.screenX - dragState.x;
-  const dy = e.screenY - dragState.y;
-  dragState = { x: e.screenX, y: e.screenY };
-  // 在独立窗口里通过 window.moveBy 生效
-  try { window.moveBy(dx, dy); } catch (_) {}
-});
-window.addEventListener('mouseup', () => { dragState = null; });
-
-$('btn-pin').addEventListener('click', () => {
-  pinned = !pinned;
-  $('btn-pin').style.opacity = pinned ? '1' : '0.4';
-  $('btn-pin').title = pinned ? '已置顶' : '未置顶';
-});
-
-$('btn-close').addEventListener('click', () => {
-  stop();
-  window.close();
-  // 独立窗口关不掉时退回空白
-  setTimeout(() => { document.body.innerHTML = ''; }, 200);
-});
 
 // 页面隐藏时降频，省资源
 document.addEventListener('visibilitychange', () => {

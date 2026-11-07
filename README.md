@@ -35,9 +35,9 @@ token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细
 
 ![链路追踪](docs/screenshots/traces.png)
 
-**tok/s 液态玻璃悬浮小窗：实时生成速度 + 最近一笔的 token 与费用**
+**tok/s 液态玻璃悬浮小窗（无边框、真置顶）：实时生成速度 + 最近一笔的 token 与费用**
 
-![悬浮窗](docs/screenshots/float-glass.png)
+![悬浮窗](docs/screenshots/widget.png)
 
 ## 特性
 
@@ -63,7 +63,7 @@ token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细
 **看板**
 - 汇总卡片、Token 构成 / 成本 / 请求趋势图、365 天活跃热力图、请求健康时间线
 - 额度 / 余额紧凑卡片（多渠道多账号窗口）、额度告警（桌面通知 + webhook，状态机 + 冷却防刷屏）
-- 请求链路追踪（阶段耗时瀑布）、实时 tok/s 悬浮小窗（`/float`）
+- 请求链路追踪（阶段耗时瀑布）、实时 tok/s 悬浮小窗（无边框置顶原生窗，`/float`）
 
 **采集器体系**（只读，不碰上游数据）
 - Antigravity Tools（SQLite token 用量 + 各账号额度窗口）
