@@ -340,14 +340,18 @@ async def list_models(request: Request):
 if WEB_DIR.exists():
     app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
 
+    def _no_cache(path: Path):
+        """页面文件禁缓存：改版后 WebView2/浏览器不会拿到旧页面。"""
+        return FileResponse(path, headers={"Cache-Control": "no-store"})
+
     @app.get("/")
     async def index():
-        return FileResponse(WEB_DIR / "index.html")
+        return _no_cache(WEB_DIR / "index.html")
 
     @app.get("/float")
     async def float_window():
-        """实时 tok/s 悬浮窗（独立小窗口）。"""
-        return FileResponse(WEB_DIR / "float.html")
+        """实时 tok/s 悬浮窗（无边框置顶原生窗）。"""
+        return _no_cache(WEB_DIR / "float.html")
 else:
     @app.get("/")
     async def index_fallback():
