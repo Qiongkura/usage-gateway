@@ -31,8 +31,8 @@ DWMWCP_ROUND = 2
 GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000
 LWA_ALPHA = 0x2
-# 整窗透明度（0-255）：数值越小越透。216 ≈ 85%，壁纸色调会透进玻璃
-WINDOW_ALPHA = 216
+# 整窗透明度（0-255）：255 = 完全不透明（用户定稿：可读性优先）
+WINDOW_ALPHA = 255
 
 
 class ACCENT_POLICY(ctypes.Structure):
