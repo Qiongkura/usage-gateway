@@ -11,6 +11,7 @@
 """
 import ctypes
 import time
+import ctypes.wintypes as wintypes
 
 import webview
 
@@ -18,6 +19,8 @@ HWND_TOPMOST = -1
 HWND_NOTOPMOST = -2
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
+SWP_NOZORDER = 0x0004
+SWP_SHOWWINDOW = 0x0040
 WCA_ACCENT_POLICY = 19
 ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
 DWMWA_WINDOW_CORNER_PREFERENCE = 33
@@ -82,19 +85,72 @@ def _apply_glass(hwnd: int) -> None:
 class Api:
     """暴露给页面 JS：window.pywebview.api.xxx()"""
 
+    def __init__(self):
+        self.topmost = True
+        self._drag_last = None
+        self._hwnd_cache = None
+
     def close_window(self):
         for w in webview.windows:
             w.destroy()
 
     def toggle_top(self, top: bool):
+        self.topmost = bool(top)
+        hwnd = self._hwnd()
+        if hwnd:
+            self._set_z(hwnd)
+
+    def drag_start(self):
+        pt = wintypes.POINT()
+        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+        self._drag_last = (pt.x, pt.y)
+
+    def drag_move(self):
+        """拖动中移动窗口：始终带上 TOPMOST，拖到哪都保持置顶。"""
+        if self._drag_last is None:
+            return
+        pt = wintypes.POINT()
+        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+        dx, dy = pt.x - self._drag_last[0], pt.y - self._drag_last[1]
+        self._drag_last = (pt.x, pt.y)
+        if dx == 0 and dy == 0:
+            return
+        hwnd = self._hwnd()
+        if not hwnd:
+            return
+        rect = wintypes.RECT()
+        ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        ctypes.windll.user32.SetWindowPos(
+            hwnd,
+            HWND_TOPMOST if self.topmost else 0,
+            rect.left + dx, rect.top + dy, 0, 0,
+            SWP_NOSIZE | SWP_SHOWWINDOW | (0 if self.topmost else SWP_NOZORDER),
+        )
+
+    def drag_end(self):
+        self._drag_last = None
+        if self.topmost:
+            hwnd = self._hwnd()
+            if hwnd:
+                ctypes.windll.user32.SetWindowPos(
+                    hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE
+                )
+
+    def _set_z(self, hwnd: int):
+        ctypes.windll.user32.SetWindowPos(
+            hwnd,
+            HWND_TOPMOST if self.topmost else HWND_NOTOPMOST,
+            0, 0, 0, 0,
+            SWP_NOSIZE | SWP_NOMOVE,
+        )
+
+    def _hwnd(self) -> int | None:
+        if self._hwnd_cache:
+            return self._hwnd_cache
         hwnd = _find_hwnd(timeout=0.5)
         if hwnd:
-            ctypes.windll.user32.SetWindowPos(
-                hwnd,
-                HWND_TOPMOST if top else HWND_NOTOPMOST,
-                0, 0, 0, 0,
-                SWP_NOSIZE | SWP_NOMOVE,
-            )
+            self._hwnd_cache = hwnd
+        return hwnd
 
 
 def _setup():
@@ -107,9 +163,8 @@ webview.create_window(
     "tok/s",
     "http://127.0.0.1:9000/float",
     width=264,
-    height=216,
+    height=238,
     frameless=True,
-    easy_drag=True,
     transparent=True,
     js_api=Api(),
 )

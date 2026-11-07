@@ -71,7 +71,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 2px 12px 8px;
+    padding: 14px 12px 10px;
     min-height: 0;
   }
   #tps {
@@ -83,6 +83,7 @@
     transition: color .25s;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+    margin-top: 6px;
   }
   #unit {
     font-size: 10px;
@@ -94,7 +95,7 @@
   #spark {
     height: 26px;
     width: 100%;
-    margin: 8px 0 7px;
+    margin: 12px 0 12px;
     display: flex;
     align-items: flex-end;
     justify-content: center;
@@ -199,7 +200,7 @@ function setStatus(text, isErr) {
   $('status').className = isErr ? 'err' : '';
 }
 
-// —— 原生窗（pywebview）专属：置顶锁定 / 关闭，经 js_api 调 Python ——
+// —— 原生窗（pywebview）专属：置顶锁定 / 关闭 / 拖动，经 js_api 调 Python ——
 function pyApi(){ return window.pywebview && window.pywebview.api; }
 $('btn-close').onclick = () => { const a = pyApi(); if (a) a.close_window(); };
 $('btn-pin').onclick = () => {
@@ -213,6 +214,32 @@ $('btn-pin').onclick = () => {
 function showCtl(){ if (pyApi()) $('ctl').style.display = 'flex'; }
 window.addEventListener('pywebviewready', showCtl);
 setTimeout(showCtl, 900);   // 某些版本不派发该事件，兜底探测
+
+// 拖动：光标增量 + SetWindowPos 始终带 TOPMOST，拖到哪都保持置顶
+let dragging = false, pendingMove = false;
+$('win').addEventListener('pointerdown', e => {
+  if (e.target.closest('.btn')) return;
+  const a = pyApi();
+  if (!a) return;
+  dragging = true;
+  try { $('win').setPointerCapture(e.pointerId); } catch (err) {}
+  a.drag_start();
+});
+$('win').addEventListener('pointermove', () => {
+  if (!dragging || pendingMove) return;
+  pendingMove = true;
+  requestAnimationFrame(() => {
+    pendingMove = false;
+    const a = pyApi();
+    if (a) a.drag_move();
+  });
+});
+$('win').addEventListener('pointerup', () => {
+  if (!dragging) return;
+  dragging = false;
+  const a = pyApi();
+  if (a) a.drag_end();
+});
 
 function renderSpark() {
   const el = $('spark');
