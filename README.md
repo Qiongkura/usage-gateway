@@ -2,6 +2,10 @@
 
 [English](README.en.md)
 
+[![tests](https://github.com/Qiongkura/usage-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Qiongkura/usage-gateway/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 本地优先的多上游 LLM 网关：**客户端只认你发的 key，上游 key 永不外泄**；每一次调用的
 token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细」账本的 Web 看板。
 
@@ -103,6 +107,14 @@ shell.Run "cmd /c uv run python -m app.main >> logs\gateway.log 2>&1", 0, False
 登录后网关自动在后台运行（第二个实例会因端口占用自动退出，可放心重复执行）。
 再给桌面建一个指向 `http://127.0.0.1:9000/` 的快捷方式即可一键打开；
 用 Edge/Chrome 的 `--app=http://127.0.0.1:9000/` 模式可以得到无地址栏的独立窗口。
+
+## Docker
+
+```bash
+docker compose up -d --build
+```
+
+挂载 `./data`（账本数据库）与 `./config.yaml`；首次启动没有配置时会自动复制示例配置，改好 key 后 `docker compose restart`。
 
 ## 客户端接入
 

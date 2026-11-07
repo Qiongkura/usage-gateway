@@ -16,9 +16,12 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.api import stats as stats_api  # noqa: E402
+from app.alerts import QuotaAlerter, QuotaItem  # noqa: E402
 from app.collectors.vibe import VibeCollector  # noqa: E402
+from app.config import QuotaAlertConfig  # noqa: E402
 from app.db import Store  # noqa: E402
-from app.models import UsageRecord  # noqa: E402
+from app.models import QuotaSnapshot, UsageRecord  # noqa: E402
+from app.scheduler import load_quota_items  # noqa: E402
 
 
 class PruneUsageTest(unittest.TestCase):
@@ -133,6 +136,56 @@ class AdminAuthTest(unittest.TestCase):
             client.post("/api/admin/checkpoint?admin_key=secret-key").status_code,
             200,
         )
+
+
+class BurnRateTest(unittest.TestCase):
+    def test_burn_prediction(self):
+        tmp = Path(tempfile.mkdtemp(prefix="ugburn-"))
+        store = Store(tmp / "usage.db")
+        now = int(time.time())
+        # 24h 前 50%，现在 25%：每天掉 25 个点 → 约 1 天耗尽
+        for h, pct in ((24 * 3600, 50.0), (12 * 3600, 37.5), (0, 25.0)):
+            store.insert_quota([QuotaSnapshot(
+                ts=now - h, source="mistral", account=None, window="api_budget",
+                remaining_pct=pct,
+            )])
+        items = load_quota_items(store, stale_sec=10800)
+        it = [x for x in items if x.window == "api_budget" and x.source == "mistral"][0]
+        self.assertIsNotNone(it.days_left)
+        self.assertAlmostEqual(it.days_left, 1.0, delta=0.2)
+        self.assertAlmostEqual(it.burn_per_day, 25.0, delta=1.0)
+        store.close()
+
+    def test_burn_skipped_when_not_draining(self):
+        tmp = Path(tempfile.mkdtemp(prefix="ugburn2-"))
+        store = Store(tmp / "usage.db")
+        now = int(time.time())
+        # 一直在涨（刚重置过）：不预测
+        for h, pct in ((24 * 3600, 50.0), (0, 80.0)):
+            store.insert_quota([QuotaSnapshot(
+                ts=now - h, source="mistral", account=None, window="api_budget",
+                remaining_pct=pct,
+            )])
+        items = load_quota_items(store, stale_sec=10800)
+        it = [x for x in items if x.window == "api_budget"][0]
+        self.assertIsNone(it.days_left)
+        store.close()
+
+    def test_burn_warn_before_threshold(self):
+        """还没到告警阈值，但按速率 3 天内耗尽 → 提前预警。"""
+        cfg = QuotaAlertConfig(enabled=True, warn_pct=20, critical_pct=10)
+        alerter = QuotaAlerter(cfg)
+        item = QuotaItem(
+            source="mistral", account="api", window="api_budget",
+            remaining_pct=60.0, days_left=2.0,
+            ts=int(time.time()), stale=False,
+        )
+        events = alerter.evaluate([item])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].kind, "warn")
+        self.assertIn("天耗尽", events[0].message)
+        # 冷却期内不重复提醒
+        self.assertEqual(alerter.evaluate([item]), [])
 
 
 if __name__ == "__main__":

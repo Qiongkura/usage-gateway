@@ -870,43 +870,29 @@ def active_models(request: Request, range_: str = Query("today", alias="range"))
 
 @router.get("/quota")
 def quota(request: Request):
-    conn = _store(request).read_conn()
-    rows = conn.execute(
-        """
-        SELECT q.source, q.account, q.window, q.remaining_pct,
-               q.remaining_amt, q.currency, q.resets_at, q.ts
-        FROM quota_snapshots q
-        JOIN (
-            SELECT source, COALESCE(account,'') AS acct,
-                   COALESCE(window,'') AS win, MAX(ts) AS max_ts
-            FROM quota_snapshots
-            GROUP BY source, acct, win
-        ) latest
-          ON q.source = latest.source
-         AND COALESCE(q.account,'') = latest.acct
-         AND COALESCE(q.window,'')  = latest.win
-         AND q.ts = latest.max_ts
-        ORDER BY q.source, q.account, q.window
-        """
-    ).fetchall()
+    from ..scheduler import load_quota_items
 
     alerter = getattr(request.app.state, "alerter", None)
     warn_pct = alerter.cfg.warn_pct if alerter else 20.0
     critical_pct = alerter.cfg.critical_pct if alerter else 10.0
+    stale_sec = alerter.cfg.stale_sec if alerter else 10800
 
     out = []
-    for r in rows:
-        item = dict(r)
-        pct = item.get("remaining_pct")
+    for it in load_quota_items(_store(request), stale_sec):
+        d = it.to_dict()
+        pct = d.get("remaining_pct")
         if pct is None:
-            item["level"] = "unknown"
+            d["level"] = "unknown"
         elif pct <= critical_pct:
-            item["level"] = "critical"
+            d["level"] = "critical"
         elif pct <= warn_pct:
-            item["level"] = "warn"
+            d["level"] = "warn"
         else:
-            item["level"] = "ok"
-        out.append(item)
+            d["level"] = "ok"
+        # 燃烧率：按当前速率 3 天内耗尽且还没到告警阈值的，按 warn 提示
+        if d.get("days_left") is not None and d["days_left"] <= 3 and d["level"] == "ok":
+            d["level"] = "warn"
+        out.append(d)
     return out
 
 

@@ -1,5 +1,9 @@
 # Usage Gateway
 
+[![tests](https://github.com/Qiongkura/usage-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/Qiongkura/usage-gateway/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 A local-first multi-upstream LLM gateway: **clients only see the keys you issue** — upstream
 keys never leave the server. Every call is metered into a per-call ledger with itemized cost,
 cache-hit savings, and a built-in web dashboard.
@@ -65,6 +69,14 @@ Dashboard at http://127.0.0.1:9000, API docs at `/docs`.
 
 Binds to `127.0.0.1` by default. If you expose it, set `server.admin_key`
 (protects `/api/admin/*`) and review the read-only `/api` surface.
+
+## Docker
+
+```bash
+docker compose up -d --build
+```
+
+Mounts `./data` (ledger database) and `./config.yaml`; on first start the example config is copied automatically — edit your keys and `docker compose restart`.
 
 ## Client usage
 

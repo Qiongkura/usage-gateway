@@ -166,6 +166,51 @@ class Scheduler:
             self.alerter.evaluate(items)
 
 
+def compute_burn(conn, hours: int = 48, min_span_hours: float = 6.0) -> dict[tuple[str, str, str], dict]:
+    """按最近 N 小时快照计算每个池子的燃烧率。
+
+    返回 {(source, account, window): {"per_day": 每天掉的百分点, "days_left": 预计耗尽天数}}。
+    数据不足（样本 < 2 或跨度 < 6 小时）、未在消耗、或刚重置过的窗口不返回。
+    """
+    since = int(time.time()) - hours * 3600
+    rows = conn.execute(
+        "SELECT source, COALESCE(account,'') AS a, COALESCE(window,'') AS w, "
+        "ts, remaining_pct FROM quota_snapshots "
+        "WHERE ts > ? AND remaining_pct IS NOT NULL ORDER BY ts",
+        (since,),
+    ).fetchall()
+
+    series: dict[tuple[str, str, str], list[tuple[int, float]]] = {}
+    for r in rows:
+        series.setdefault((r["source"], r["a"], r["w"]), []).append(
+            (int(r["ts"]), float(r["remaining_pct"]))
+        )
+
+    out: dict[tuple[str, str, str], dict] = {}
+    for k, pts in series.items():
+        # 重置检测：百分比上跳超过 5 个点视为窗口重置，只取重置后的段
+        start = 0
+        for i in range(1, len(pts)):
+            if pts[i][1] - pts[i - 1][1] > 5:
+                start = i
+        seg = pts[start:]
+        if len(seg) < 2:
+            continue
+        span_h = (seg[-1][0] - seg[0][0]) / 3600
+        if span_h < min_span_hours:
+            continue
+        drop = seg[0][1] - seg[-1][1]
+        if drop <= 0.2:
+            continue
+        per_day = drop * 24 / span_h
+        days_left = min(seg[-1][1] / per_day, 365.0) if per_day > 0.05 else None
+        out[k] = {
+            "per_day": round(per_day, 3),
+            "days_left": round(days_left, 1) if days_left is not None else None,
+        }
+    return out
+
+
 def load_quota_items(store: Store, stale_sec: int) -> list[QuotaItem]:
     """把最新快照折算成统一的百分比视图。
 
@@ -197,6 +242,7 @@ def load_quota_items(store: Store, stale_sec: int) -> list[QuotaItem]:
     ).fetchall()
 
     items: list[QuotaItem] = []
+    burn = compute_burn(conn)
     for r in rows:
         pct = r["remaining_pct"]
         amt = r["remaining_amt"]
@@ -229,4 +275,8 @@ def load_quota_items(store: Store, stale_sec: int) -> list[QuotaItem]:
             ts=int(r["ts"] or 0),
             stale=(now - int(r["ts"] or 0)) > stale_sec,
         ))
+        b = burn.get((r["source"], r["account"] or "", r["window"] or ""))
+        if b:
+            items[-1].burn_per_day = b["per_day"]
+            items[-1].days_left = b["days_left"]
     return items

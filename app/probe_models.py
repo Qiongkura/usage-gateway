@@ -33,9 +33,11 @@ ROOT = Path(__file__).resolve().parent.parent
 HEALTH_FILE = ROOT / "model_health.json"
 
 # 探测用的最小请求
+# 注意：max_tokens 不能设成 1。部分上游（例如 antigravity 的 Gemini）在
+# max_tokens=1 时会直接中断流，探测会误判成 server_error，把可用模型隐藏掉。
 PROBE_BODY = {
     "messages": [{"role": "user", "content": "hi"}],
-    "max_tokens": 1,
+    "max_tokens": 16,
     "stream": False,
 }
 

@@ -59,6 +59,9 @@ class QuotaItem:
     ts: int = 0
     level: int = LEVEL_OK
     stale: bool = False
+    # 燃烧率：按近期消耗速度预测
+    burn_per_day: float | None = None   # 每天掉的百分点
+    days_left: float | None = None      # 按当前速率预计耗尽天数
 
     @property
     def key(self) -> tuple[str, str, str]:
@@ -80,6 +83,8 @@ class QuotaItem:
             "ts": self.ts,
             "level": LEVEL_NAMES.get(self.level, "ok"),
             "stale": self.stale,
+            "burn_per_day": self.burn_per_day,
+            "days_left": self.days_left,
         }
 
 
@@ -152,6 +157,8 @@ def build_message(kind: str, item: QuotaItem) -> str:
     else:
         head = f"🟠 额度偏低：{item.label} 剩 {pct}"
     tail = " ".join(x for x in (_fmt_amount(item), _fmt_reset(item.resets_at)) if x)
+    if item.days_left is not None and item.days_left <= 30:
+        tail += f" · 按当前速率约 {item.days_left:.1f} 天耗尽"
     return f"{head} {tail}".strip()
 
 
@@ -176,6 +183,15 @@ class QuotaAlerter:
                 continue
 
             level = classify(item.remaining_pct, self.cfg)
+            # 燃烧率预警：还没到告警阈值，但按当前速率 3 天内耗尽 → 提前预警
+            if (
+                level == LEVEL_OK
+                and not item.stale
+                and item.days_left is not None
+                and item.days_left <= 3
+                and item.remaining_pct <= 90
+            ):
+                level = LEVEL_WARN
             item.level = level
             state = self.states.get(item.key)
             if state is None:
