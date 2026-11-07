@@ -26,10 +26,13 @@ SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_NOZORDER = 0x0004
 SWP_SHOWWINDOW = 0x0040
-WCA_ACCENT_POLICY = 19
-ACCENT_ENABLE_ACRYLICBLURBEHIND = 4
 DWMWA_WINDOW_CORNER_PREFERENCE = 33
 DWMWCP_ROUND = 2
+GWL_EXSTYLE = -20
+WS_EX_LAYERED = 0x00080000
+LWA_ALPHA = 0x2
+# 整窗透明度（0-255）：数值越小越透。216 ≈ 85%，壁纸色调会透进玻璃
+WINDOW_ALPHA = 216
 
 
 class ACCENT_POLICY(ctypes.Structure):
@@ -47,7 +50,6 @@ class WINDOWCOMPOSITIONATTRIBDATA(ctypes.Structure):
         ("Data", ctypes.c_void_p),
         ("SizeOfData", ctypes.c_size_t),
     ]
-
 
 def _find_hwnd(title: str = "tok/s", timeout: float = 8.0) -> int | None:
     """等窗口创建完成并拿到 HWND。"""
@@ -73,16 +75,12 @@ def _apply_glass(hwnd: int) -> None:
     ctypes.windll.dwmapi.DwmSetWindowAttribute(
         hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ctypes.byref(pref), ctypes.sizeof(pref)
     )
-    # 2) 亚克力模糊背后：把桌面真实模糊后垫在玻璃下
-    accent = ACCENT_POLICY()
-    accent.AccentState = ACCENT_ENABLE_ACRYLICBLURBEHIND
-    accent.AccentFlags = 2
-    accent.GradientColor = 0x30FFFFFF  # ABGR：约 19% 白色底，让壁纸颜色更多透进来
-    data = WINDOWCOMPOSITIONATTRIBDATA()
-    data.Attribute = WCA_ACCENT_POLICY
-    data.Data = ctypes.cast(ctypes.pointer(accent), ctypes.c_void_p)
-    data.SizeOfData = ctypes.sizeof(accent)
-    user32.SetWindowCompositionAttribute(hwnd, ctypes.byref(data))
+    # 2) 整窗半透明（WS_EX_LAYERED）：壁纸色调透进玻璃，文字仍可读。
+    #    注：WebView2+WinForms 组合给不了「模糊桌面」的逐像素玻璃，
+    #    均匀半透明是这条技术栈能做到的透桌面上限。
+    ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+    user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED)
+    user32.SetLayeredWindowAttributes(hwnd, 0, WINDOW_ALPHA, LWA_ALPHA)
     # 3) 置顶兜底
     user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE)
 
