@@ -1166,6 +1166,7 @@ Object.assign(I18N_ZH, {
   'b.from_record': '记录值', 'b.from_computed': '按当前价格表补算',
   'b.req_model': '请求模型', 'b.account': '账号', 'b.total_ms': '总耗时',
   'b.gen_speed': '纯生成', 'b.trace': '链路',
+  'b.copy_trace': '复制 trace', 'b.copied': '已复制',
   'page.info': '第 {0} / {1} 页 · 共 {2} 条',
 });
 
@@ -1269,6 +1270,7 @@ const I18N_EN = {
   'b.from_record': 'as recorded', 'b.from_computed': 'computed from current price table',
   'b.req_model': 'requested', 'b.account': 'account', 'b.total_ms': 'total',
   'b.gen_speed': 'gen', 'b.trace': 'trace',
+  'b.copy_trace': 'copy trace', 'b.copied': 'copied',
 };
 
 let LANG = localStorage.getItem('ug_lang') || 'zh';
@@ -1451,6 +1453,24 @@ function logRowHtml(x, i){
   <tr class="log-detail" id="log-detail-${i}"><td colspan="9"><div class="log-bill"></div></td></tr>`;
 }
 
+function copyTraceId(el, id){
+  const done = () => {
+    const orig = el.textContent;
+    el.textContent = t('b.copied');
+    setTimeout(() => { el.textContent = orig; }, 1200);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(id).then(done, () => {});
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = id;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+}
+
 async function fillLogDetail(i){
   const x = logsState.lastData && logsState.lastData.items[i];
   const box = document.querySelector(`#log-detail-${i} .log-bill`);
@@ -1483,6 +1503,12 @@ async function fillLogDetail(i){
   if (x.latency_ms != null) metaBits.push(`${t('b.total_ms')} ${x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1)+'s' : Math.round(x.latency_ms)+'ms'}`);
   if (x.gen_tok_per_sec != null) metaBits.push(`${t('b.gen_speed')} ${x.gen_tok_per_sec.toFixed(1)} tok/s`);
   if (metaBits.length) html += `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${metaBits.join(' · ')}</div>`;
+  if (x.trace_id){
+    html += `<div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+      <span class="pill" style="padding:2px 10px;font-size:11px;cursor:pointer;user-select:none" onclick="copyTraceId(this,'${x.trace_id}')">${t('b.copy_trace')}</span>
+      <span style="font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace">${x.trace_id}</span>
+    </div>`;
+  }
   html += `<div id="log-trace-${i}" style="margin-top:8px"></div>`;
   box.innerHTML = html;
 

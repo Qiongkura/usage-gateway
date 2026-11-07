@@ -322,6 +322,37 @@ class Store:
             self.conn.commit()
         return cur.rowcount
 
+    def backup_database(self, backup_dir: Path, keep: int = 7) -> Path | None:
+        """每天滚动备份一次数据库（VACUUM INTO 生成紧凑的一致性快照）。
+
+        返回本次备份路径；今天已备份过则返回 None。
+        """
+        today = time.strftime("%Y%m%d")
+        target = Path(backup_dir) / f"usage-{today}.db"
+        if target.exists():
+            return None
+        backup_dir = Path(backup_dir)
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        with self.lock:
+            tmp = target.with_suffix(".tmp.db")
+            try:
+                self.conn.execute("VACUUM INTO ?", (str(tmp),))
+                tmp.replace(target)
+            except Exception:
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return None
+        # 只保留最近 keep 份
+        backups = sorted(backup_dir.glob("usage-*.db"))
+        for old in backups[:-keep] if len(backups) > keep else []:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        return target
+
     # ---------- 水位线 ----------
 
     def watermark(self, name: str) -> int:

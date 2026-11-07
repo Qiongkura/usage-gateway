@@ -163,7 +163,7 @@ async def lifespan(app: FastAPI):
 
     sched = Scheduler(
         store, collectors, cfg.collect_interval_sec,
-        alerter=alerter, retention_days=cfg.retention_days,
+        alerter=alerter, retention_days=cfg.retention_days, prices=cfg.prices,
     )
     sched.start()
     app.state.sched = sched

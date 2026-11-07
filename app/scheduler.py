@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
-from typing import Iterable
+from datetime import datetime, timezone
+from typing import Any, Iterable
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -23,6 +23,7 @@ class Scheduler:
         interval_sec: int = 60,
         alerter: QuotaAlerter | None = None,
         retention_days: int = 365,
+        prices: Any = None,
     ):
         self.store = store
         self.collectors = collectors
@@ -30,6 +31,8 @@ class Scheduler:
         self.alerter = alerter
         # 用量记录保留天数（0 = 永久保留）
         self.retention_days = max(0, int(retention_days or 0))
+        # 价格表：采集器入库的记录没有成本，这里按官方价补算
+        self.prices = prices
         self.sched = BackgroundScheduler(timezone="Asia/Shanghai")
 
     def start(self) -> None:
@@ -64,7 +67,7 @@ class Scheduler:
         except Exception:
             log.exception("quota alert evaluation failed")
 
-        # 每 10 分钟清理一次过期追踪（保留 7 天）
+        # 每 10 分钟清理一次过期追踪（保留 7 天）+ 每天滚动备份数据库
         now = time.time()
         if not hasattr(self, "_last_prune"):
             self._last_prune = 0.0
@@ -92,12 +95,31 @@ class Scheduler:
                         )
                 except Exception:
                     log.exception("prune usage failed")
+            try:
+                backup = self.store.backup_database(
+                    self.store.path.parent / "backups", keep=7
+                )
+                if backup is not None:
+                    log.info("[backup] database snapshot -> %s", backup.name)
+            except Exception:
+                log.exception("database backup failed")
 
     def _run_usage(self, c: Collector) -> None:
         since = self.store.watermark(c.name)
         records = list(c.collect_usage(since))
         if not records:
             return
+        # 采集器记录（本地客户端日志）没有成本，按价格表（官方价）补算；
+        # 与网关路径的 record_from_usage 同一套口径
+        if self.prices is not None:
+            for r in records:
+                if r.cost_usd is None:
+                    r.cost_usd = self.prices.compute(
+                        upstream=r.source, model=r.model,
+                        input_tokens=r.input_tokens, output_tokens=r.output_tokens,
+                        cache_read=r.cache_read, cache_write=r.cache_write,
+                        at=datetime.fromtimestamp(r.ts, tz=timezone.utc),
+                    )
         inserted = self.store.insert_usage(records)
         self.store.set_watermark(c.name, max(r.ts for r in records))
         if inserted:
