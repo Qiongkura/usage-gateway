@@ -1,0 +1,31 @@
+# ---- 机密：绝不提交 ----
+config.yaml
+*.key
+credentials*.json
+
+# ---- 个人运行数据 ----
+data/
+logs/
+*.log
+debug.log
+model_health.json
+HANDOFF.md
+harness-patch.yml
+
+# ---- 个人便捷脚本（含真实 key / 个性化路径）----
+*.bat
+*.vbs
+_run.*
+
+# ---- Python / 工具链 ----
+__pycache__/
+*.pyc
+.venv/
+.uv-cache/
+.edge-profile/
+.pytest_cache/
+
+# ---- 临时文件 ----
+.tmp*
+*.tmp
+nohup.out

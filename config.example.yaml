@@ -1,0 +1,86 @@
+# ============================================================
+# Usage Gateway 配置
+# ============================================================
+# 复制为 config.yaml 后修改。
+# 客户端只认 gateway.client_keys 里的 key，上游 key 只在这里。
+
+server:
+  host: 127.0.0.1
+  port: 9000
+  # /api/admin/*（关停/checkpoint）的鉴权 key；留空不启用。
+  # 若把 host 改成 0.0.0.0 暴露到局域网，务必设置！调用时带 x-admin-key 头或 ?admin_key=
+  # admin_key: "change-me"
+
+data_dir: ./data
+# 采集间隔（秒）
+collect_interval_sec: 60
+
+# 用量记录保留天数：超过自动清理，防止数据库无限增长（0 = 永久保留）。
+retention_days: 365
+
+# ------------------------------------------------------------
+# 客户端 Key：发给各个客户端用，客户端看不到上游
+# ------------------------------------------------------------
+gateway:
+  client_keys:
+    - name: opencode
+      key: sk-gw-opencode-0001
+      # 留空表示允许所有模型
+      allow_models: []
+    - name: vibe
+      key: sk-gw-vibe-0001
+      allow_models: []
+    - name: default
+      key: sk-gw-default-0001
+      allow_models: []
+
+# ------------------------------------------------------------
+# 上游渠道
+# ------------------------------------------------------------
+upstreams:
+  # --- Antigravity Tools（本地反代，OpenAI 兼容）---
+  - name: antigravity
+    type: openai
+    base_url: http://127.0.0.1:8045/v1
+    api_key: ""          # 填入你的 Antigravity Tools key
+    # 从 /v1/models 拉取，留空则自动发现
+    models: []
+    # 额外：从 Antigravity Tools 的 SQLite 读取真实 token 做校正
+    usage_source:
+      type: antigravity_sqlite
+      # 留空自动探测 ~/.antigravity_tools
+      data_dir: ""
+
+  # --- Mistral 官方 API ---
+  - name: mistral
+    type: openai
+    base_url: https://api.mistral.ai/v1
+    api_key: ""          # 填入你的 Mistral key
+    models:
+      - mistral-large-latest
+      - mistral-medium-latest
+      - mistral-small-latest
+      - codestral-latest
+
+  # --- 中转站示例（New API 兼容）---
+  # - name: relay-a
+  #   type: openai
+  #   base_url: https://api.example-a.com/v1
+  #   api_key: sk-xxxx
+  #   models: []
+  #   # 余额采集（可选）
+  #   balance:
+  #     base_url: https://api.example-a.com
+  #     access_token: ""
+  #     user_id: ""
+
+# ------------------------------------------------------------
+# 本地日志采集（可选，用于补充网关看不到的用量）
+# ------------------------------------------------------------
+local_sources:
+  opencode:
+    enabled: true
+    data_dir: ""          # 留空自动探测 ~/.local/share/opencode
+  vibe:
+    enabled: true
+    home: ""              # 留空自动探测 ~/.vibe

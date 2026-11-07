@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>tok/s</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: transparent;
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  #win {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: rgba(20, 22, 28, 0.92);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    color: #e8eaed;
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+  }
+  #drag {
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px 0 10px;
+    cursor: move;
+    background: rgba(255,255,255,0.04);
+    flex-shrink: 0;
+  }
+  #title { font-size: 10.5px; color: #8b909a; letter-spacing: .3px; }
+  #btns { display: flex; gap: 4px; }
+  .btn {
+    width: 16px; height: 16px; border: none; border-radius: 4px;
+    background: rgba(255,255,255,0.08); color: #b0b4bc;
+    font-size: 10px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .btn:hover { background: rgba(255,255,255,0.16); color: #fff; }
+  .btn.close:hover { background: #ef4444; color: #fff; }
+
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 10px 8px;
+    min-height: 0;
+  }
+  #tps {
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -1.5px;
+    color: #10b981;
+    transition: color .25s;
+    font-variant-numeric: tabular-nums;
+  }
+  #unit {
+    font-size: 10.5px;
+    color: #8b909a;
+    margin-top: 2px;
+    letter-spacing: .5px;
+  }
+  #meta {
+    margin-top: 6px;
+    font-size: 10px;
+    color: #6b7078;
+    text-align: center;
+    line-height: 1.5;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #meta b { color: #9aa0a8; font-weight: 500; }
+
+  #spark {
+    height: 22px;
+    width: 100%;
+    margin-top: 4px;
+    display: flex;
+    align-items: flex-end;
+    gap: 1.5px;
+    flex-shrink: 0;
+  }
+  #spark i {
+    flex: 1;
+    background: #10b981;
+    border-radius: 1px 1px 0 0;
+    min-height: 1px;
+    opacity: .55;
+    transition: height .3s, opacity .3s;
+  }
+  #spark i:last-child { opacity: 1; }
+
+  #status {
+    font-size: 9px;
+    color: #4a4f57;
+    text-align: center;
+    padding-bottom: 3px;
+    flex-shrink: 0;
+  }
+  #status.err { color: #ef4444; }
+  .idle #tps { color: #4a4f57; }
+</style>
+</head>
+<body>
+<div id="win">
+  <div id="drag">
+    <span id="title">TOK/S</span>
+    <div id="btns">
+      <button class="btn" id="btn-pin" title="置顶">📌</button>
+      <button class="btn close" id="btn-close" title="关闭">✕</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="tps">—</div>
+    <div id="unit">tok/s</div>
+    <div id="meta">等待请求…</div>
+    <div id="spark"></div>
+  </div>
+
+  <div id="status">连接中…</div>
+</div>
+
+<script>
+const API = location.origin;
+const POLL_MS = 1500;
+const SPARK_N = 24;
+
+let history = [];
+let lastTs = null;
+let pinned = true;
+let timer = null;
+
+const $ = id => document.getElementById(id);
+
+function setStatus(text, isErr) {
+  $('status').textContent = text;
+  $('status').className = isErr ? 'err' : '';
+}
+
+function renderSpark() {
+  const el = $('spark');
+  if (!history.length) { el.innerHTML = ''; return; }
+  const max = Math.max(...history, 1);
+  el.innerHTML = history.map(v => {
+    const h = Math.max(2, Math.round(v / max * 22));
+    return `<i style="height:${h}px"></i>`;
+  }).join('');
+}
+
+function colorFor(tps) {
+  if (tps >= 40) return '#10b981';
+  if (tps >= 15) return '#f59e0b';
+  if (tps > 0)   return '#ef4444';
+  return '#4a4f57';
+}
+
+function fmtK(n) {
+  n = Number(n) || 0;
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e4) return (n / 1e3).toFixed(1) + 'K';
+  return n.toLocaleString();
+}
+
+// 单次费用自适应精度：小金额不舍成 $0.00
+function fmtCost(v) {
+  if (v == null || typeof v !== 'number' || isNaN(v)) return null;
+  if (v >= 0.01)   return '$' + v.toFixed(4);
+  if (v >= 0.0001) return '$' + v.toFixed(5);
+  if (v > 0)       return '$' + v.toFixed(6);
+  return '$0';
+}
+
+async function poll() {
+  try {
+    const r = await fetch(`${API}/api/speed?limit=1`, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const latest = data.latest;
+
+    setStatus('已连接 · ' + new Date().toLocaleTimeString('zh-CN'), false);
+
+    if (!latest) {
+      $('main').classList.add('idle');
+      $('tps').textContent = '—';
+      $('meta').textContent = '还没有请求';
+      return;
+    }
+
+    // 新请求才更新大数字，避免闪烁；优先展示纯解码生成速率（排除首字等待）
+    const isNew = latest.ts !== lastTs;
+    if (isNew) {
+      lastTs = latest.ts;
+      const tps = latest.gen_tok_per_sec || latest.tok_per_sec || 0;
+      history.push(tps);
+      if (history.length > SPARK_N) history.shift();
+      renderSpark();
+
+      $('main').classList.remove('idle');
+      $('tps').textContent = tps >= 100 ? tps.toFixed(0) : tps.toFixed(1);
+      $('tps').style.color = colorFor(tps);
+    }
+
+    const lat = latest.latency_ms >= 1000
+      ? (latest.latency_ms / 1000).toFixed(1) + 's'
+      : Math.round(latest.latency_ms) + 'ms';
+    const ttft = latest.ttft_ms != null ? Math.round(latest.ttft_ms) + 'ms' : '—';
+    const avg = latest.tok_per_sec || 0;
+
+    // 单次调用的 token 构成 + 缓存命中 + 费用
+    const prompt = (latest.input_tokens || 0) + (latest.cache_read || 0) + (latest.cache_write || 0);
+    const hit = prompt > 0 ? Math.round((latest.cache_read || 0) / prompt * 100) : 0;
+    const cost = fmtCost(latest.cost_usd);
+
+    $('meta').innerHTML =
+      `<b>${latest.source}</b> · ↑${fmtK(prompt)} 命中${hit}% · ↓${fmtK(latest.output_tokens)}<br>` +
+      `${lat} · 首字 ${ttft} · 均 ${avg.toFixed(1)}` +
+      (cost ? ` · <span style="color:#fbbf24;font-weight:600">${cost}</span>` : '');
+
+    if (isNew) {
+      $('win').animate(
+        [{ boxShadow: '0 0 0 2px rgba(16,185,129,0.6)' }, { boxShadow: '0 8px 28px rgba(0,0,0,0.45)' }],
+        { duration: 700, easing: 'ease-out' }
+      );
+    }
+  } catch (e) {
+    setStatus('连接失败: ' + e.message, true);
+  }
+}
+
+function start() {
+  stop();
+  poll();
+  timer = setInterval(poll, POLL_MS);
+}
+function stop() {
+  if (timer) { clearInterval(timer); timer = null; }
+}
+
+// 拖动窗口（浏览器里拖动整个窗口移动；作为独立窗口时由系统处理）
+let dragState = null;
+$('drag').addEventListener('mousedown', e => {
+  if (e.target.closest('.btn')) return;
+  dragState = { x: e.screenX, y: e.screenY };
+});
+window.addEventListener('mousemove', e => {
+  if (!dragState) return;
+  const dx = e.screenX - dragState.x;
+  const dy = e.screenY - dragState.y;
+  dragState = { x: e.screenX, y: e.screenY };
+  // 在独立窗口里通过 window.moveBy 生效
+  try { window.moveBy(dx, dy); } catch (_) {}
+});
+window.addEventListener('mouseup', () => { dragState = null; });
+
+$('btn-pin').addEventListener('click', () => {
+  pinned = !pinned;
+  $('btn-pin').style.opacity = pinned ? '1' : '0.4';
+  $('btn-pin').title = pinned ? '已置顶' : '未置顶';
+});
+
+$('btn-close').addEventListener('click', () => {
+  stop();
+  window.close();
+  // 独立窗口关不掉时退回空白
+  setTimeout(() => { document.body.innerHTML = ''; }, 200);
+});
+
+// 页面隐藏时降频，省资源
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stop(); else start();
+});
+
+start();
+</script>
+</body>
+</html>

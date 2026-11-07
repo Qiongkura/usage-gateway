@@ -1,0 +1,403 @@
+# ============================================================
+# 价格表：按上游 × 模型定价
+# ============================================================
+# 单位：USD / 1M tokens
+#
+# ── 计算方式 ────────────────────────────────────────────────
+#   单次成本 = 输入tok/1M × input
+#            + 输出tok/1M × output
+#            + 缓存读tok/1M × cache_read
+#            + 缓存写tok/1M × cache_write
+#            × 时段倍率（若该模型配了 multipliers）
+#
+# ── 价格来源与可信度 ────────────────────────────────────────
+#   ✅ 已验证    与上游官方接口返回的价格交叉核对一致
+#   ⚠️  估算      按同系列上一代模型的价格推断，可能有偏差
+#
+#   opencode (Zen)  —— ✅ 全部自动拉取
+#       启动时从 https://opencode.ai/inference/go/v1/models 的 cost 字段读取，
+#       不需要在下面配置，也不建议覆盖（zen_prices.json 由脚本生成）。
+#
+#   relay-axon      —— ✅ 已验证 5 个 / ⚠️ 其余估算
+#       glm-5.3 / glm-5.3-flash / gpt-5.6-luna / gpt-6-luna / kimi-k3
+#       与 Zen 官方价完全一致。
+#
+#   antigravity     —— ⚠️ 多为估算
+#       gemini-4-argon 已按 Zen 官方价 $2/$10 修正（原填 $4/$20 是错的）。
+#       gemini-3.8-flash / claude-* 按同系列上一代价推断。
+#       注意：Antigravity 是 Google 订阅制，这里的价格只用于算「等效价值」。
+#
+#   mistral         —— ⚠️ 按 Mistral 官方 API 价
+#       large $2/$6、medium $0.40/$2、small $0.10/$0.30 为 v3 世代价格，
+#       v4 世代若有调整请自行修正。
+#       注意：你的 Mistral 走订阅额度，这里同样只算「等效价值」。
+#
+# ── 怎么核对 / 修正 ────────────────────────────────────────
+#   1. 看当前生效的价格：  curl http://127.0.0.1:9000/api/pricing
+#   2. 改完 pricing.yaml 后回填历史：  uv run python -m app.backfill
+#   3. 重启网关生效。
+# ============================================================
+
+upstreams:
+  # ----------------------------------------------------------
+  # Antigravity Tools（Google 订阅 → 这里按 Gemini 官方 API 原价折算）
+  # ----------------------------------------------------------
+  # 价格来自 2026 年官方公布表：
+  #   Gemini 4 Argon    $2.00 / $10.00，12/1 起涨到 $4.00 / $20.00
+  #   Gemini 3.8 Flash  $0.75 / $3.75，2027/1/1 起翻倍
+  #   Gemini 3.6 Flash  同 3.8 Flash
+  #   Gemini 3.5 Flash-Lite  $0.30 / $2.50
+  #   Gemini 3.1 Flash-Lite  $0.25 / $1.50
+  #   Gemini 3.1 Pro Preview $2.00（≤20万）/ $12.00
+  # 涨价用 multipliers 的 after 条件自动切换。
+  antigravity:
+    # --- Gemini 4 Argon（旗舰）---
+    gemini-4-argon:
+      input: 2.00
+      output: 10.00
+      cache_read: 0.10
+      multipliers:
+        - when: { after: "2026-12-01" }
+          factor: 2.0          # 12/1 起 $4.00 / $20.00 / 缓存 $0.20
+    gemini-4-argon-high:
+      input: 2.00
+      output: 10.00
+      cache_read: 0.10
+      multipliers:
+        - when: { after: "2026-12-01" }
+          factor: 2.0
+    gemini-4-argon-low:
+      input: 2.00
+      output: 10.00
+      cache_read: 0.10
+      multipliers:
+        - when: { after: "2026-12-01" }
+          factor: 2.0
+    gemini-4-argon-medium:
+      input: 2.00
+      output: 10.00
+      cache_read: 0.10
+      multipliers:
+        - when: { after: "2026-12-01" }
+          factor: 2.0
+
+    # --- Gemini 3.8 Flash（最常用）---
+    gemini-3.8-flash:
+      input: 0.75
+      output: 3.75
+      cache_read: 0.1875
+      multipliers:
+        - when: { after: "2027-01-01" }
+          factor: 2.0          # 2027 起 $1.50 / $7.50
+    gemini-3.8-flash-high:
+      input: 0.75
+      output: 3.75
+      cache_read: 0.1875
+      multipliers:
+        - when: { after: "2027-01-01" }
+          factor: 2.0
+    gemini-3.8-flash-low:
+      input: 0.75
+      output: 3.75
+      cache_read: 0.1875
+      multipliers:
+        - when: { after: "2027-01-01" }
+          factor: 2.0
+    gemini-3.8-flash-medium:
+      input: 0.75
+      output: 3.75
+      cache_read: 0.1875
+      multipliers:
+        - when: { after: "2027-01-01" }
+          factor: 2.0
+    gemini-3.8-flash-tiered:
+      input: 0.75
+      output: 3.75
+      cache_read: 0.1875
+      multipliers:
+        - when: { after: "2027-01-01" }
+          factor: 2.0
+
+    # --- Gemini 3.6 Flash（同 3.8 Flash 价）---
+    gemini-3.6-flash:
+      input: 0.75
+      output: 3.75
+      cache_read: 0.1875
+      multipliers:
+        - when: { after: "2027-01-01" }
+          factor: 2.0
+
+    # --- Gemini 3.5 Flash-Lite ---
+    gemini-3.5-flash-lite:
+      input: 0.30
+      output: 2.50
+      cache_read: 0.075
+
+    # --- Gemini 3.1 Flash-Lite ---
+    gemini-3.1-flash-lite:
+      input: 0.25
+      output: 1.50
+      cache_read: 0.0625
+
+    # --- Gemini 3.1 Pro Preview ---
+    gemini-3.1-pro-preview:
+      input: 2.00
+      output: 12.00
+      cache_read: 0.50
+
+    # --- Claude（Antigravity 里也有，按 Anthropic 官方价）---
+    # 官方表：输入 / 输出 / 缓存写入(5m) / 缓存命中
+    #   Fable 5.1   $10 / $50 / $12.50 / $0.25
+    #   Opus 5.5    $4  / $20 / $5     / $0.20
+    #   Sonnet 5.5  $2  / $10 / $2.50  / $0.10
+    #   Sonnet 4.6  $3  / $15 / $3.75  / $0.30
+    #   Opus 4.6    $5  / $25 / $6.25  / $0.50
+    #   Haiku 5.5   $0.10 / $0.50 / $0.125 / $0.01（≤10万 token 档）
+    claude-sonnet-4-6:
+      input: 3.00
+      output: 15.00
+      cache_write: 3.75
+      cache_read: 0.30
+    claude-sonnet-5-5:
+      input: 2.00
+      output: 10.00
+      cache_write: 2.50
+      cache_read: 0.10
+    claude-sonnet-5-5-high:
+      input: 2.00
+      output: 10.00
+      cache_write: 2.50
+      cache_read: 0.10
+    claude-sonnet-5-5-low:
+      input: 2.00
+      output: 10.00
+      cache_write: 2.50
+      cache_read: 0.10
+    claude-sonnet-5-5-medium:
+      input: 2.00
+      output: 10.00
+      cache_write: 2.50
+      cache_read: 0.10
+    claude-opus-4-6:
+      input: 5.00
+      output: 25.00
+      cache_write: 6.25
+      cache_read: 0.50
+    claude-opus-4-6-thinking:
+      input: 5.00
+      output: 25.00
+      cache_write: 6.25
+      cache_read: 0.50
+    claude-opus-5-5:
+      input: 4.00
+      output: 20.00
+      cache_write: 5.00
+      cache_read: 0.20
+    claude-opus-5-5-high:
+      input: 4.00
+      output: 20.00
+      cache_write: 5.00
+      cache_read: 0.20
+    claude-opus-5-5-low:
+      input: 4.00
+      output: 20.00
+      cache_write: 5.00
+      cache_read: 0.20
+    claude-opus-5-5-medium:
+      input: 4.00
+      output: 20.00
+      cache_write: 5.00
+      cache_read: 0.20
+    claude-haiku-5-5:
+      input: 0.10
+      output: 0.50
+      cache_write: 0.125
+      cache_read: 0.01
+
+    # --- 其他 ---
+    gpt-oss-120b:
+      input: 0.15
+      output: 0.60
+      cache_read: 0.015
+    gemini-3.1-flash-image:
+      input: 0.75
+      output: 3.75
+      cache_read: 0.1875
+
+  # ----------------------------------------------------------
+  # Mistral（订阅额度）
+  # ----------------------------------------------------------
+  # 按你的要求：跑在上面的 deepseek / glm 系列，
+  # 一律采用它们的官方价（与 Zen 价格表一致）。
+  # Mistral 自家模型保留官方 API 价。
+  mistral:
+    # --- DeepSeek（官方价，与 Zen 一致）---
+    deepseek-v4-1-flash-1017:
+      input: 0.15
+      output: 0.60
+      cache_read: 0.003
+    deepseek-v4.1-flash:
+      input: 0.15
+      output: 0.60
+      cache_read: 0.003
+    deepseek-v4-pro:
+      input: 0.66
+      output: 1.98
+      cache_read: 0.022
+
+    # --- GLM / Z.ai（官方价，与 Zen 一致）---
+    glm-5-2:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    glm-5.2:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    zai-glm-5-2:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    zai-glm-5-3:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    glm-5.3:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    zai-glm-5:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    zai-glm-latest:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    zai-glm-5-3-flash:
+      input: 0.15
+      output: 0.50
+      cache_read: 0.03
+    glm-5.3-flash:
+      input: 0.15
+      output: 0.50
+      cache_read: 0.03
+
+    # --- Mistral 自家模型（官方 API 价）---
+    mistral-large-latest:
+      input: 2.00
+      output: 6.00
+    mistral-large-4:
+      input: 2.00
+      output: 6.00
+    mistral-large-4-0:
+      input: 2.00
+      output: 6.00
+    mistral-large-2512:
+      input: 2.00
+      output: 6.00
+    mistral-medium-latest:
+      input: 0.40
+      output: 2.00
+    mistral-medium-3.5:
+      input: 0.40
+      output: 2.00
+    mistral-medium-3-5:
+      input: 0.40
+      output: 2.00
+    mistral-medium:
+      input: 0.40
+      output: 2.00
+    mistral-small-latest:
+      input: 0.10
+      output: 0.30
+    mistral-small-2603:
+      input: 0.10
+      output: 0.30
+    codestral-latest:
+      input: 0.30
+      output: 0.90
+    codestral-2508:
+      input: 0.30
+      output: 0.90
+    magistral-medium-latest:
+      input: 2.00
+      output: 5.00
+    magistral-small-latest:
+      input: 0.50
+      output: 1.50
+    devstral-latest:
+      input: 0.40
+      output: 2.00
+
+  # ----------------------------------------------------------
+  # axon 中转站
+  # ----------------------------------------------------------
+  # 中转站价格通常按官方价的某个倍率。
+  # 下面先按"官方价 × 1.0"填，你按实际充值倍率调整。
+  # 例如：如果充值 100 元得 100 美元额度，就是 1.0；
+  #      如果 100 元得 500 美元额度，就是 0.2。
+  relay-axon:
+    kimi-k3:
+      input: 3.00
+      output: 15.00
+      cache_read: 0.30
+      cache_write: 3.00
+    kimi-k2.6:
+      input: 0.95
+      output: 4.00
+      cache_read: 0.19
+    gpt-6-luna:
+      input: 0.10
+      output: 0.50
+      cache_read: 0.01
+      cache_write: 0.125
+    gpt-6-sol:
+      input: 1.00
+      output: 4.00
+      cache_read: 0.10
+    gpt-6.1-sol:
+      input: 1.00
+      output: 4.00
+      cache_read: 0.10
+    gpt-6.1-terra:
+      input: 0.50
+      output: 2.00
+      cache_read: 0.05
+    gpt-5.6-luna:
+      input: 0.20
+      output: 1.20
+      cache_read: 0.02
+      cache_write: 0.25
+    gpt-5.6-sol:
+      input: 1.00
+      output: 4.00
+      cache_read: 0.10
+    gpt-5.6-terra:
+      input: 0.50
+      output: 2.00
+      cache_read: 0.05
+    glm-5.3:
+      input: 1.40
+      output: 4.40
+      cache_read: 0.26
+    glm-5.3-flash:
+      input: 0.15
+      output: 0.50
+      cache_read: 0.03
+    deepseek-flash:
+      input: 0.15
+      output: 0.60
+      cache_read: 0.003
+    gpt-oss-20b:
+      input: 0.05
+      output: 0.20
+    gemma-4-31b-it:
+      input: 0.10
+      output: 0.30
+    gemma-3-12b-it:
+      input: 0.05
+      output: 0.15
+    gemma-3-4b-it:
+      input: 0.02
+      output: 0.06

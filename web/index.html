@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage Gateway</title>
+<script src="/static/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#fff; --line:#e8eaee; --text:#1a1d23; --muted:#8b909a;
+    --blue:#3b82f6; --purple:#8b5cf6; --green:#10b981; --orange:#f59e0b;
+    --teal:#14b8a6; --red:#ef4444; --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+       font-size:14px}
+  .wrap{max-width:1440px;margin:0 auto;padding:20px 24px 60px}
+
+  header{display:flex;align-items:center;justify-content:space-between;
+         background:var(--card);border-radius:14px;padding:14px 20px;box-shadow:var(--shadow);margin-bottom:18px}
+  .brand{font-weight:800;letter-spacing:.06em;font-size:15px;text-transform:uppercase}
+  .head-right{display:flex;align-items:center;gap:10px}
+  .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+        border-radius:999px;padding:6px 12px;font-size:12.5px;background:#fff;cursor:pointer}
+  .pill.active{background:#111;color:#fff;border-color:#111}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .updated{color:var(--muted);font-size:12px;text-align:right;margin-bottom:12px}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .tabs{display:flex;gap:8px}
+  .tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 16px;
+       font-size:13px;cursor:pointer}
+  .tab.active{background:#111;color:#fff;border-color:#111}
+
+  .grid{display:grid;gap:14px;margin-bottom:14px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g4{grid-template-columns:repeat(4,1fr)}
+
+  .card{background:var(--card);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);
+        border-top:3px solid transparent;position:relative;overflow:hidden}
+  .card.blue{border-top-color:var(--blue)}
+  .card.purple{border-top-color:var(--purple)}
+  .card.green{border-top-color:var(--green)}
+  .card.orange{border-top-color:var(--orange)}
+  .card.teal{border-top-color:var(--teal)}
+  .card .label{color:var(--muted);font-size:12.5px;letter-spacing:.03em;margin-bottom:10px}
+  .card .value{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .card .sub{color:var(--muted);font-size:12px;margin-top:8px}
+  .icon{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:9px;
+        display:grid;place-items:center;color:#fff;font-size:14px}
+  .icon.blue{background:var(--blue)} .icon.purple{background:var(--purple)}
+  .icon.green{background:var(--green)} .icon.orange{background:var(--orange)}
+  .icon.teal{background:var(--teal)}
+  .spark{height:44px;margin-top:12px}
+
+  .section{background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow);margin-bottom:14px}
+  .section h3{margin:0 0 4px;font-size:15px}
+  .section .desc{color:var(--muted);font-size:12px;margin-bottom:16px}
+  .chart-box{height:280px;position:relative}
+
+  .heat{display:grid;grid-template-columns:repeat(52,1fr);gap:2px}
+  .heat i{aspect-ratio:1;border-radius:2px;background:#eceef2;display:block}
+  .heat i.l1{background:#d7f5e9} .heat i.l2{background:#9ae6c6}
+  .heat i.l3{background:#4ade80} .heat i.l4{background:#16a34a}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:500;padding:8px 10px;
+     border-bottom:1px solid var(--line);font-size:12px}
+  td{padding:9px 10px;border-bottom:1px solid #f2f4f7}
+  tr:last-child td{border-bottom:none}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;background:#eef2ff;color:#4338ca}
+  .empty{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
+
+  /* 调用明细 */
+  .filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .filterbar .pill{padding:7px 12px;font-size:12.5px}
+  .filterbar input.pill{width:170px;outline:none;font-family:inherit}
+  .summarybar{display:flex;flex-wrap:wrap;gap:6px 20px;align-items:center;background:#f8f9fb;
+              border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px;
+              font-size:12.5px;color:var(--muted)}
+  .summarybar b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+  .badge{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10.5px;
+         font-weight:600;font-variant-numeric:tabular-nums;vertical-align:1px}
+  .cellsub{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap}
+  tr.log-row{cursor:pointer}
+  tr.log-row:hover td{background:#fafbfd}
+  tr.log-detail{display:none}
+  tr.log-detail.open{display:table-row}
+  tr.log-detail td{background:#f8f9fb;padding:0;border-bottom:1px solid var(--line)}
+  tr.log-row.expanded td{border-bottom-color:transparent}
+  .log-bill{padding:12px 18px 14px;min-width:0}
+  .bill-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:12.5px;
+            font-variant-numeric:tabular-nums;max-width:640px}
+  .bill-row .k{color:var(--muted)} .bill-row .v{font-weight:600}
+  .pager{display:flex;align-items:center;gap:12px;justify-content:flex-end;margin-top:12px;
+         font-size:12.5px;color:var(--muted)}
+  .pager .pill{user-select:none}
+  .pager .pill.disabled{opacity:.35;pointer-events:none}
+  .cost{font-weight:700;font-variant-numeric:tabular-nums;color:var(--orange)}
+
+  /* 额度（紧凑卡片）：多列瀑布式——最高的渠道独占左列，其余按高度自动堆到右列 */
+  #quota-groups{columns:2;column-gap:12px}
+  .quota-card{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;padding:10px 14px;
+              min-width:0;break-inside:avoid;page-break-inside:avoid;margin-bottom:12px}
+  .quota-title{font-weight:700;font-size:13px;margin-bottom:2px}
+  .quota-acct{color:var(--muted);font-size:11.5px;margin:6px 0 3px}
+  .qtable th{padding:4px 8px}
+  .qtable td{padding:5px 8px}
+  /* 固定列宽比例：所有额度卡片的 窗口/剩余/数值/重置 列完全对齐 */
+  .qtable.qfix{table-layout:fixed;width:100%}
+  .qtable.qfix td:nth-child(4), .qtable.qfix th:nth-child(4){text-align:right}
+  @media(max-width:900px){#quota-groups{columns:1}}
+
+  /* 额度告警横幅 */
+  .alertbar{display:none;background:var(--card);border-radius:14px;padding:14px 18px;
+            box-shadow:var(--shadow);margin-bottom:14px;border-left:4px solid var(--orange)}
+  .alertbar.show{display:block}
+  .alertbar.critical{border-left-color:var(--red)}
+  .alertbar-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin-bottom:10px}
+  .alertbar-head .cnt{font-weight:600;font-size:12px;color:var(--muted)}
+  .alertrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #f2f4f7;font-size:13px}
+  .alertrow:first-of-type{border-top:none}
+  .alertrow .lvl{width:8px;height:8px;border-radius:50%;flex:none}
+  .alertrow .lvl.critical{background:var(--red)}
+  .alertrow .lvl.warn{background:var(--orange)}
+  .alertrow .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .alertrow .pct{font-weight:700;font-variant-numeric:tabular-nums}
+  .alertrow .pct.critical{color:var(--red)}
+  .alertrow .pct.warn{color:var(--orange)}
+  .alertrow .reset{color:var(--muted);font-size:12px;flex:none}
+  tr.lvl-warn td:first-child{border-left:2px solid var(--orange);padding-left:8px}
+  tr.lvl-critical td:first-child{border-left:2px solid var(--red);padding-left:8px}
+  tr.lvl-stale{opacity:.5}
+
+  @media(max-width:1100px){.g4{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}}
+  @media(max-width:640px){.g4{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Usage Gateway</div>
+    <div class="head-right">
+      <span class="pill"><span class="dot"></span><span id="status" data-i18n="st.connecting">连接中</span></span>
+      <span class="pill active" data-lang="zh">中</span>
+      <span class="pill" data-lang="en">EN</span>
+    </div>
+  </header>
+
+  <div class="updated"><span data-i18n="hdr.updated">最近更新：</span><span id="updated">--:--:--</span></div>
+
+  <div class="alertbar" id="alertbar">
+    <div class="alertbar-head">
+      <span data-i18n="alert.title">⚠ 额度告警</span>
+      <span class="cnt" id="alertbar-cnt"></span>
+    </div>
+    <div id="alertbar-rows"></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="tabs">
+      <span class="tab active" data-tab="overview" data-i18n="tab.overview">概览</span>
+      <span class="tab" data-tab="logs" data-i18n="tab.logs">调用明细</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <select id="range" class="pill" style="padding:8px 14px">
+        <option value="today" data-i18n="range.today">今天</option>
+        <option value="7d" selected data-i18n="range.7d">最近 7 天</option>
+        <option value="30d" data-i18n="range.30d">最近 30 天</option>
+        <option value="all" data-i18n="range.all">全部</option>
+      </select>
+      <span class="pill" id="refresh" data-i18n="btn.refresh">↻ 刷新</span>
+    </div>
+  </div>
+
+  <div id="view-overview">
+  <div class="grid g2">
+    <div class="card blue">
+      <div class="icon blue">⚡</div>
+      <div class="label" data-i18n="c.requests">请求总数</div>
+      <div class="value" id="v-requests">0</div>
+      <div class="sub" id="v-requests-sub">成功 0 · 失败 0</div>
+      <div class="spark"><canvas id="spark-requests"></canvas></div>
+    </div>
+    <div class="card purple">
+      <div class="icon purple">◆</div>
+      <div class="label" data-i18n="c.tokens">Token 总数</div>
+      <div class="value" id="v-tokens">0</div>
+      <div class="sub" id="v-tokens-sub">缓存 0 · 推理 0</div>
+      <div class="spark"><canvas id="spark-tokens"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid g4">
+    <div class="card green">
+      <div class="icon green">◎</div>
+      <div class="label">RPM</div>
+      <div class="value" id="v-rpm">0</div>
+      <div class="sub" data-i18n="c.rpm_sub">请求 / 分钟</div>
+    </div>
+    <div class="card orange">
+      <div class="icon orange">↗</div>
+      <div class="label">TPM</div>
+      <div class="value" id="v-tpm">0</div>
+      <div class="sub" data-i18n="c.tpm_sub">Token / 分钟</div>
+    </div>
+    <div class="card teal">
+      <div class="icon teal">%</div>
+      <div class="label" data-i18n="c.cache">缓存率</div>
+      <div class="value" id="v-cache">0%</div>
+      <div class="sub" data-i18n="c.cache_sub">缓存命中占比</div>
+    </div>
+    <div class="card green">
+      <div class="icon green">⚡</div>
+      <div class="label" data-i18n="c.tps">生成速度</div>
+      <div class="value" id="v-tps">0</div>
+      <div class="sub" id="v-tps-sub">tok/s · 平均延迟 0ms</div>
+    </div>
+    <div class="card orange">
+      <div class="icon orange">$</div>
+      <div class="label" data-i18n="c.cost">总成本（原价）</div>
+      <div class="value" id="v-cost">$0</div>
+      <div class="sub" id="v-cost-sub">按官方 API 价折算</div>
+    </div>
+    <div class="card purple">
+      <div class="icon purple">¥</div>
+      <div class="label" data-i18n="c.unit">平均单价</div>
+      <div class="value" id="v-unit">$0</div>
+      <div class="sub" id="v-unit-sub" data-i18n="c.unit_sub">每百万 token</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.quota">额度 / 余额</h3>
+    <div class="desc" data-i18n="s.quota_desc">来自各上游的额度快照，按来源分组；低于阈值会标红并触发告警</div>
+    <div id="quota-groups"></div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.htl">请求健康时间线</h3>
+    <div class="desc">
+      <span data-i18n="s.htl_desc1">最近</span> <span id="htl-minutes">24 小时</span><span data-i18n="s.htl_desc2">，每格</span>
+      <span id="htl-bucket">2</span> <span data-i18n="s.htl_desc3">分钟，按列从上到下、再从左到右阅读</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;gap:8px">
+        <span class="pill htl-range" data-min="360" data-i18n="htl.6h">6 小时</span>
+        <span class="pill htl-range active" data-min="1440" data-i18n="htl.24h">24 小时</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;font-size:12px">
+        <span id="htl-stats" style="color:#8b909a"></span>
+        <span style="display:flex;align-items:center;gap:4px">
+          <i style="width:9px;height:9px;border-radius:2px;background:#10b981;display:inline-block"></i><span data-i18n="htl.l_ok">成功</span>
+          <i style="width:9px;height:9px;border-radius:2px;background:#f59e0b;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_part">部分失败</span>
+          <i style="width:9px;height:9px;border-radius:2px;background:#ef4444;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_all">全失败</span>
+          <i style="width:9px;height:9px;border-radius:2px;background:#eceef2;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_none">无请求</span>
+        </span>
+      </div>
+    </div>
+    <div id="htl-grid" style="display:flex;flex-direction:column;gap:2px"></div>
+    <div id="htl-axis" style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#8b909a"></div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.trend">Token 构成</h3>
+    <div class="desc" data-i18n="s.trend_desc">按时间聚合的输入 / 输出 / 缓存 / 推理 token（堆叠）</div>
+    <div class="chart-box"><canvas id="chart-trend"></canvas></div>
+    <div id="trend-empty" class="empty" style="display:none" data-i18n="s.trend_empty">
+      数据点不足（当前只有 1 个时间桶），多跑一会儿就能看到趋势
+    </div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.cost_trend">成本趋势</h3>
+    <div class="desc" data-i18n="s.cost_trend_desc">按时间聚合的 USD 成本</div>
+    <div class="chart-box" style="height:220px"><canvas id="chart-cost"></canvas></div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.lp">图表线条选择</h3>
+    <div class="desc">
+      <span data-i18n="s.lp_desc">选择要在趋势图中对比的模型。</span>
+      <span id="line-count" style="color:#8b909a"></span>
+    </div>
+    <div id="line-picker" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+
+  <div class="grid g2">
+    <div class="section" style="margin-bottom:0">
+      <h3 data-i18n="s.req_trend">请求趋势</h3>
+      <div class="desc" data-i18n="s.req_trend_desc">按时间的请求数</div>
+      <div class="chart-box" style="height:200px"><canvas id="chart-requests"></canvas></div>
+    </div>
+    <div class="section" style="margin-bottom:0">
+      <h3 data-i18n="s.tok_trend">Token 趋势</h3>
+      <div class="desc" data-i18n="s.tok_trend_desc">按时间的 token 总量</div>
+      <div class="chart-box" style="height:200px"><canvas id="chart-tokens"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.heat">活跃热力图</h3>
+    <div class="desc" data-i18n="s.heat_desc">最近 365 天每天的 token 用量，颜色越深用得越多</div>
+    <div id="heatmap" style="overflow-x:auto;padding-bottom:8px"></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:#8b909a">
+      <span>少</span>
+      <i style="width:11px;height:11px;border-radius:2px;background:#eceef2;display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:#d7f5e9;display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:#9ae6c6;display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:#4ade80;display:inline-block"></i>
+      <i style="width:11px;height:11px;border-radius:2px;background:#16a34a;display:inline-block"></i>
+      <span>多</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.by_source">按来源</h3>
+    <div class="desc" data-i18n="s.by_source_desc">每个上游渠道的用量与成本</div>
+    <table>
+      <thead><tr><th data-i18n="th.source">来源</th><th data-i18n="th.type">类型</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.input">输入</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.cache">缓存</th><th class="num" data-i18n="th.speed">速度</th><th class="num" data-i18n="th.cost_list">成本（原价）</th><th class="num" data-i18n="th.per_mtok">每百万 token</th></tr></thead>
+      <tbody id="tb-source"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.cost_detail">成本明细（上游 × 模型）</h3>
+    <div class="desc" data-i18n="s.cost_detail_desc">同一模型在不同上游价格不同，这里按实际调用的上游计价</div>
+    <table>
+      <thead><tr><th data-i18n="th.upstream">上游</th><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.input">输入</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.cost">成本</th><th class="num" data-i18n="th.avg_cost">单次均价</th></tr></thead>
+      <tbody id="tb-cost"></tbody>
+    </table>
+  </div>
+
+  <div class="grid g2">
+    <div class="section" style="margin-bottom:0">
+      <h3 data-i18n="s.by_model">按模型</h3>
+      <div class="desc" data-i18n="s.by_model_desc">Top 模型用量</div>
+      <table>
+        <thead><tr><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.input">输入</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.reasoning">推理</th></tr></thead>
+        <tbody id="tb-model"></tbody>
+      </table>
+    </div>
+    <div class="section" style="margin-bottom:0">
+      <h3 data-i18n="s.by_key">按客户端 Key</h3>
+      <div class="desc" data-i18n="s.by_key_desc">每个 key 的用量与成本</div>
+      <table>
+        <thead><tr><th data-i18n="th.key">Key</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.tokens">Token</th><th class="num" data-i18n="th.cost">成本</th></tr></thead>
+        <tbody id="tb-key"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.health">上游健康状态</h3>
+    <div class="desc" data-i18n="s.health_desc">失败计数、冷却状态、成功率。故障转移默认关闭，失败即返回错误。</div>
+    <table>
+      <thead><tr><th data-i18n="th.prefix">前缀</th><th data-i18n="th.upstream">上游</th><th data-i18n="th.status">状态</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.sr">成功率</th><th class="num" data-i18n="th.latency">延迟</th><th data-i18n="th.last_err">最近错误</th></tr></thead>
+      <tbody id="tb-health"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.speed">生成速度</h3>
+    <div class="desc"><span data-i18n="s.speed_desc">最近 20 次成功请求的 tok/s，</span><span id="speed-avg">—</span></div>
+    <table>
+      <thead><tr><th data-i18n="th.time">时间</th><th data-i18n="th.upstream">上游</th><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.total_ms">总耗时</th><th class="num" data-i18n="th.ttft">首字</th><th class="num">tok/s</th><th class="num" data-i18n="th.gen_tps">生成 tok/s</th></tr></thead>
+      <tbody id="tb-speed"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.traces">请求链路追踪</h3>
+    <div class="desc" data-i18n="s.traces_desc">最近 20 条请求的阶段耗时，用于排查慢请求</div>
+    <table>
+      <thead><tr><th data-i18n="th.time">时间</th><th data-i18n="th.upstream">上游</th><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.status">状态</th><th class="num" data-i18n="th.total_ms">总耗时</th><th data-i18n="th.chain">链路</th></tr></thead>
+      <tbody id="tb-traces"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3 data-i18n="s.routes">模型路由</h3>
+    <div class="desc"><span data-i18n="s.routes_desc1">必须用</span> <code>前缀/模型名</code><span data-i18n="s.routes_desc2">指定上游；不可用的模型已自动隐藏</span></div>
+    <table>
+      <thead><tr><th data-i18n="th.prefix">前缀</th><th data-i18n="th.upstream">上游</th><th class="num" data-i18n="th.models_n">可用模型</th><th data-i18n="th.sample">示例</th></tr></thead>
+      <tbody id="tb-routes"></tbody>
+    </table>
+  </div>
+  </div><!-- /view-overview -->
+
+  <div id="view-logs" style="display:none">
+    <div class="section">
+      <h3 data-i18n="logs.title">调用明细</h3>
+      <div class="desc" data-i18n="logs.desc">每一次调用的 token 构成、缓存命中与单次费用；点击任意行展开费用账单与链路耗时</div>
+      <div class="filterbar">
+        <select id="l-range" class="pill">
+          <option value="today" data-i18n="range.today">今天</option>
+          <option value="1d" data-i18n="range.1d">最近 24 小时</option>
+          <option value="7d" data-i18n="range.7d">最近 7 天</option>
+          <option value="30d" data-i18n="range.30d">最近 30 天</option>
+          <option value="all" data-i18n="range.all">全部</option>
+        </select>
+        <select id="l-source" class="pill"><option value="" data-i18n="l.channel_all">渠道：全部</option></select>
+        <select id="l-key" class="pill"><option value="" data-i18n="l.key_all">Key：全部</option></select>
+        <select id="l-origin" class="pill">
+          <option value="gateway" data-i18n="origin.gateway">网关实时</option>
+          <option value="collector" data-i18n="origin.collector">本地采集</option>
+          <option value="all" data-i18n="origin.all">全部来源</option>
+        </select>
+        <select id="l-status" class="pill">
+          <option value="all" data-i18n="status.all">全部状态</option>
+          <option value="success" data-i18n="status.success">仅成功</option>
+          <option value="error" data-i18n="status.error">仅失败</option>
+        </select>
+        <input id="l-model" class="pill" placeholder="搜索模型…" data-i18n-ph="logs.search_ph">
+        <span style="flex:1"></span>
+        <select id="l-auto" class="pill" data-i18n-title="auto.title" title="自动刷新">
+          <option value="0" data-i18n="auto.off">自动刷新：关</option>
+          <option value="5" selected data-i18n="auto.5">每 5 秒</option>
+          <option value="15" data-i18n="auto.15">每 15 秒</option>
+          <option value="60" data-i18n="auto.60">每 60 秒</option>
+        </select>
+        <span class="pill" id="l-export" data-i18n="btn.export">⬇ 导出 CSV</span>
+        <span class="pill" id="l-reload" data-i18n="btn.refresh">↻ 刷新</span>
+      </div>
+      <div class="summarybar" id="l-summary"></div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr>
+            <th data-i18n="th.time">时间</th>
+            <th data-i18n="th.chan_model">渠道 / 模型</th>
+            <th class="num" data-i18n="th.status">状态</th>
+            <th class="num" data-i18n="th.input">输入</th>
+            <th class="num" data-i18n="th.cache_hit">缓存命中</th>
+            <th class="num" data-i18n="th.output">输出</th>
+            <th class="num" data-i18n="th.total">总 Token</th>
+            <th class="num" data-i18n="th.cost_this">本次费用</th>
+            <th class="num" data-i18n="th.speed_lat">速度 / 耗时</th>
+          </tr></thead>
+          <tbody id="tb-logs"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="pill" id="l-prev">‹ <span data-i18n="page.prev">上一页</span></span>
+        <span id="l-pageinfo">- / -</span>
+        <span class="pill" id="l-next"><span data-i18n="page.next">下一页</span> ›</span>
+      </div>
+    </div>
+  </div><!-- /view-logs -->
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+function fmt(n){
+  n = Number(n) || 0;
+  if (n >= 1e9) return (n/1e9).toFixed(2)+'B';
+  if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
+  if (n >= 1e4) return (n/1e3).toFixed(1)+'K';
+  return n.toLocaleString();
+}
+function fmtTime(ts){
+  if (!ts) return '—';
+  const d = new Date(ts*1000);
+  return d.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+// 距离重置还有多久
+function fmtReset(ts){
+  if (!ts) return '';
+  const delta = ts - Math.floor(Date.now()/1000);
+  if (delta <= 0) return t('reset.soon');
+  if (delta >= 86400) return t('reset.days', (delta/86400).toFixed(1));
+  if (delta >= 3600) return t('reset.hours', (delta/3600).toFixed(1));
+  return t('reset.minutes', Math.max(1, Math.round(delta/60)));
+}
+
+// 额度告警横幅：只显示 warn / critical
+function renderAlerts(data){
+  const bar = $('alertbar');
+  if (!bar) return;
+  const items = (data && data.items) || [];
+  const bad = items.filter(i => i.level === 'critical' || i.level === 'warn');
+  if (!data || data.enabled === false || !bad.length) {
+    bar.classList.remove('show', 'critical');
+    $('alertbar-rows').innerHTML = '';
+    return;
+  }
+  const critical = bad.filter(i => i.level === 'critical').length;
+  bar.classList.add('show');
+  bar.classList.toggle('critical', critical > 0);
+  $('alertbar-cnt').textContent =
+    t('alert.summary', critical, bad.length - critical) +
+    (data.config ? t('alert.threshold', data.config.warn_pct, data.config.critical_pct) : '');
+  $('alertbar-rows').innerHTML = bad.map(i => `
+    <div class="alertrow">
+      <span class="lvl ${i.level}"></span>
+      <span class="who">${i.source} · ${i.account} · ${i.window}</span>
+      <span class="pct ${i.level}">${i.remaining_pct.toFixed(1)}%</span>
+      <span class="reset">${i.remaining_amt != null ? (i.currency||'')+' '+i.remaining_amt.toFixed(2)+' · ' : ''}${fmtReset(i.resets_at)}</span>
+    </div>`).join('');
+}
+
+let sparkReq, sparkTok, trendChart, costChart, reqChart, tokChart;
+let activeModels = [];       // 当前可选的模型
+let selectedModels = [];     // 用户选中的模型（用于趋势对比）
+
+const MODEL_COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444',
+                      '#14b8a6','#ec4899','#84cc16','#6366f1','#f97316'];
+
+function modelKey(m) { return `${m.source}/${m.model}`; }
+function modelLabel(m) { return `${m.source} · ${m.model}`; }
+
+function renderLinePicker(){
+  const el = $('line-picker');
+  if (!el) return;
+  if (!activeModels.length) {
+    el.innerHTML = `<span style="color:#8b909a;font-size:12.5px">${t('lp.none')}</span>`;
+    $('line-count').textContent = '';
+    return;
+  }
+  el.innerHTML = activeModels.map((m, i) => {
+    const key = modelKey(m);
+    const on = selectedModels.includes(key);
+    const color = MODEL_COLORS[i % MODEL_COLORS.length];
+    return `<span class="pill line-item" data-key="${key}"
+      style="${on ? `background:${color}1a;border-color:${color};color:${color};font-weight:600` : ''}">
+      <i style="width:8px;height:8px;border-radius:50%;background:${on ? color : '#c9ced6'};display:inline-block"></i>
+      ${modelLabel(m)}<span style="color:#8b909a;margin-left:4px">${m.requests}</span>
+    </span>`;
+  }).join('');
+
+  $('line-count').textContent = selectedModels.length
+    ? t('lp.selected', selectedModels.length, activeModels.length)
+    : t('lp.total', activeModels.length);
+
+  el.querySelectorAll('.line-item').forEach(node => {
+    node.onclick = () => {
+      const key = node.dataset.key;
+      const idx = selectedModels.indexOf(key);
+      if (idx >= 0) selectedModels.splice(idx, 1);
+      else selectedModels.push(key);
+      renderLinePicker();
+      loadTrendCharts();
+    };
+  });
+}
+
+// 请求健康时间线：正方形矩阵（列优先：从上到下，再从左到右）
+let htlMinutes = 1440;
+const HTL_COLS = 60;   // 固定约 60 列：24h(2分钟/格) 与 6h(1分钟/格) 的格子大小一致，
+                       // 切换范围时只改变"每列行数"，不会把格子放大
+
+function renderHealthTimeline(data){
+  const grid = $('htl-grid');
+  const axis = $('htl-axis');
+  if (!grid) return;
+
+  const buckets = data.buckets || [];
+  if (!buckets.length) {
+    grid.innerHTML = '<div class="empty">暂无数据</div>';
+    axis.innerHTML = '';
+    return;
+  }
+
+  const colors = { 0: '#eceef2', 1: '#ef4444', 2: '#f59e0b', 3: '#10b981' };
+
+  // 行数由数据量推导：cells ≈ 60 列 → 6h(360格) 6 行/列，24h(720格) 12 行/列
+  const rows = Math.max(4, Math.min(12, Math.round(buckets.length / HTL_COLS)));
+
+  // 列优先填充：cells[col][row]
+  const cols = Math.ceil(buckets.length / rows);
+  const matrix = [];
+  for (let c = 0; c < cols; c++) {
+    matrix.push(buckets.slice(c * rows, (c + 1) * rows));
+  }
+
+  // 渲染：每行一个 flex 行，横向是列
+  let html = '';
+  for (let r = 0; r < rows; r++) {
+    html += '<div style="display:flex;gap:2px">';
+    for (let c = 0; c < cols; c++) {
+      const b = matrix[c][r];
+      if (!b) {
+        html += '<div style="flex:1;aspect-ratio:1;min-width:6px"></div>';
+        continue;
+      }
+      const tip = b.total === 0
+        ? `${b.time}  ${t('htl.none')}`
+        : t('htl.tip', b.time, b.total, b.ok, b.failed, b.tokens.toLocaleString());
+      html += `<div title="${tip}" style="flex:1;aspect-ratio:1;min-width:6px;background:${colors[b.level]};border-radius:2px"></div>`;
+    }
+    html += '</div>';
+  }
+  grid.innerHTML = html;
+
+  // 时间轴：列方向，每 5 列标一个时间
+  const bucketMin = data.bucket_sec / 60;
+  const colMin = rows * bucketMin;
+  let axisHtml = '';
+  const step = Math.max(1, Math.round(cols / 12));
+  for (let c = 0; c < cols; c++) {
+    const b = matrix[c][0];
+    const show = c % step === 0;
+    axisHtml += `<span style="flex:1;text-align:left;white-space:nowrap;overflow:hidden">${show && b ? b.time : ''}</span>`;
+  }
+  axis.innerHTML = axisHtml;
+
+  const totalMin = cols * colMin;
+  $('htl-stats').textContent =
+    t('htl.stats', data.total_requests, data.success_rate, data.active_buckets, buckets.length);
+  $('htl-minutes').textContent = totalMin >= 1440
+    ? (totalMin / 1440).toFixed(1).replace(/\.0$/, '') + ' ' + t('u.day')
+    : (totalMin >= 60 ? Math.round(totalMin / 60) + ' ' + t('u.hour') : Math.round(totalMin) + ' ' + t('u.min'));
+  $('htl-bucket').textContent = bucketMin;
+  const desc = document.querySelector('#htl-grid')?.closest('.section')?.querySelector('.desc');
+  if (desc) {
+    desc.title = `每列 ${rows} 格 × ${bucketMin} 分钟 = ${colMin} 分钟，共 ${cols} 列`;
+  }
+}
+
+async function loadHealthTimeline(){
+  try {
+    // 6 小时视图用 1 分钟粒度（格子数 360 = 60 列 × 6 行），与 24 小时视图格子一样大
+    const bucketSec = htlMinutes <= 360 ? 60 : 120;
+    const data = await fetch(`/api/health-timeline?minutes=${htlMinutes}&bucket_sec=${bucketSec}`).then(r=>r.json());
+    renderHealthTimeline(data);
+  } catch(e) {
+    console.error('health timeline failed', e);
+  }
+}
+
+function makeSpark(canvas, color){
+  return new Chart(canvas, {
+    type:'line',
+    data:{labels:[],datasets:[{data:[],borderColor:color,backgroundColor:color+'22',
+          fill:true,tension:.4,pointRadius:0,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:{display:false},y:{display:false}},
+      elements:{line:{borderJoinStyle:'round'}}}
+  });
+}
+
+// 365 天热力图（仿 GitHub contribution graph）
+function renderHeatmap(days){
+  const el = $('heatmap');
+  if (!el) return;
+
+  // 建立 日期 -> token 的映射
+  const map = {};
+  for (const d of days) map[d.date] = d.tokens || 0;
+
+  // 计算最大值用于分级
+  const values = Object.values(map).filter(v => v > 0);
+  const max = values.length ? Math.max(...values) : 1;
+
+  // 从 365 天前到今天
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - 364);
+  // 对齐到周日
+  start.setDate(start.getDate() - start.getDay());
+
+  const cells = [];
+  const cur = new Date(start);
+  while (cur <= today) {
+    const key = cur.toISOString().slice(0,10);
+    const v = map[key] || 0;
+    let level = 0;
+    if (v > 0) {
+      const ratio = v / max;
+      level = ratio > 0.66 ? 4 : ratio > 0.33 ? 3 : ratio > 0.1 ? 2 : 1;
+    }
+    cells.push({date: key, tokens: v, level});
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  // 按周分列（每列 7 天）
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i+7));
+
+  const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  // 列宽弹性伸缩，铺满容器宽度
+  let html = '<div style="display:flex;gap:3px;width:100%">';
+  let lastMonth = -1;
+
+  for (const week of weeks) {
+    // 月份标签
+    const first = week[0];
+    const m = parseInt(first.date.slice(5,7), 10) - 1;
+    const showLabel = m !== lastMonth;
+    if (showLabel) lastMonth = m;
+
+    html += `<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">`;
+    html += `<div style="height:13px;font-size:9.5px;color:#8b909a;white-space:nowrap">${showLabel ? monthNames[m] : ''}</div>`;
+    for (const c of week) {
+      const title = `${c.date}  ${c.tokens.toLocaleString()} tokens`;
+      html += `<i class="l${c.level}" title="${title}" style="width:100%;aspect-ratio:1;border-radius:2px;display:block;background:${
+        ['#eceef2','#d7f5e9','#9ae6c6','#4ade80','#16a34a'][c.level]
+      }"></i>`;
+    }
+    html += `</div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function loadTrendCharts(){
+  const range = $('range').value;
+  const bucket = ['today','1d','7d'].includes(range) ? 'hour' : 'day';
+
+  const ts = await fetch(`/api/timeseries?range=${range}&bucket=${bucket}`).then(r=>r.json());
+  const labels = ts.map(t => bucket === 'hour' ? t.bucket.slice(11) : t.bucket.slice(5));
+  const hasTrend = ts.length >= 2;
+
+  $('trend-empty').style.display = hasTrend ? 'none' : 'block';
+  $('chart-trend').style.display = hasTrend ? 'block' : 'none';
+
+  // 统一的时间轴配置
+  const baseOpts = {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, grid: { color: '#f0f2f5' } },
+      x: { grid: { display: false }, ticks: { maxTicksLimit: 12, font: { size: 10 } } },
+    },
+  };
+
+  // ---------- 1. Token 构成（堆叠） ----------
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  if (hasTrend) {
+    trendChart = new Chart($('chart-trend'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: t('tok.input'), data: ts.map(t=>t.input), borderColor:'#3b82f6', backgroundColor:'#3b82f633', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
+          { label: t('tok.output'), data: ts.map(t=>t.output), borderColor:'#10b981', backgroundColor:'#10b98133', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
+          { label: t('tok.cache'), data: ts.map(t=>t.cache_read), borderColor:'#f59e0b', backgroundColor:'#f59e0b33', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
+          { label: t('tok.reasoning'), data: ts.map(t=>t.reasoning), borderColor:'#8b5cf6', backgroundColor:'#8b5cf633', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
+        ],
+      },
+      options: {
+        ...baseOpts,
+        plugins: {
+          legend: { position:'top', labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, pointStyle:'circle' } },
+          tooltip: {
+            callbacks: {
+              label: c => `${c.dataset.label}: ${fmt(c.parsed.y)} tokens`,
+            },
+          },
+        },
+        scales: {
+          ...baseOpts.scales,
+          y: { ...baseOpts.scales.y, stacked: true, ticks: { callback: v => fmt(v) } },
+        },
+      },
+    });
+  }
+
+  // ---------- 2. 成本趋势 ----------
+  if (costChart) { costChart.destroy(); costChart = null; }
+  if (hasTrend) {
+    costChart = new Chart($('chart-cost'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: t('tok.cost'), data: ts.map(t=>t.cost),
+          borderColor: '#f59e0b', backgroundColor: '#f59e0b33',
+          fill: true, tension: .3, pointRadius: 2, borderWidth: 1.5,
+        }],
+      },
+      options: {
+        ...baseOpts,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: c => `$${c.parsed.y.toFixed(4)}` } },
+        },
+        scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { callback: v => '$' + v.toFixed(3) } } },
+      },
+    });
+  }
+
+  // ---------- 3/4. 请求趋势 & Token 趋势（支持按模型对比） ----------
+  let reqSeries, tokSeries;
+
+  if (selectedModels.length === 0) {
+    // 全部流量
+    reqSeries = [{ label: 'All', data: ts.map(t=>t.requests), color: '#6b7280' }];
+    tokSeries = [{ label: 'All', data: ts.map(t=>t.input+t.output+t.cache_read), color: '#6b7280' }];
+  } else {
+    // 按模型拆分
+    const perModel = await Promise.all(selectedModels.map(async (key, i) => {
+      const [source, ...rest] = key.split('/');
+      const model = rest.join('/');
+      const data = await fetch(
+        `/api/timeseries?range=${range}&bucket=${bucket}&source=${encodeURIComponent(source)}&model=${encodeURIComponent(model)}`
+      ).then(r=>r.json());
+      const map = {};
+      for (const d of data) map[d.bucket] = d;
+      return {
+        key, color: MODEL_COLORS[activeModels.findIndex(m => modelKey(m) === key) % MODEL_COLORS.length],
+        req: ts.map(t => (map[t.bucket]?.requests) || 0),
+        tok: ts.map(t => { const d = map[t.bucket]; return d ? d.input + d.output + d.cache_read : 0; }),
+      };
+    }));
+    reqSeries = perModel.map(p => ({ label: p.key.split('/').slice(1).join('/'), data: p.req, color: p.color }));
+    tokSeries = perModel.map(p => ({ label: p.key.split('/').slice(1).join('/'), data: p.tok, color: p.color }));
+  }
+
+  if (reqChart) { reqChart.destroy(); reqChart = null; }
+  if (tokChart) { tokChart.destroy(); tokChart = null; }
+
+  if (hasTrend) {
+    reqChart = new Chart($('chart-requests'), {
+      type: 'line',
+      data: { labels, datasets: reqSeries.map(s => ({
+        label: s.label, data: s.data, borderColor: s.color,
+        backgroundColor: s.color + '22', fill: true, tension: .3, pointRadius: 2, borderWidth: 1.5,
+      })) },
+      options: {
+        ...baseOpts,
+        plugins: {
+          legend: { display: reqSeries.length > 1, position:'top',
+            labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, pointStyle:'circle', font:{size:10} } },
+        },
+      },
+    });
+
+    tokChart = new Chart($('chart-tokens'), {
+      type: 'line',
+      data: { labels, datasets: tokSeries.map(s => ({
+        label: s.label, data: s.data, borderColor: s.color,
+        backgroundColor: s.color + '22', fill: true, tension: .3, pointRadius: 2, borderWidth: 1.5,
+      })) },
+      options: {
+        ...baseOpts,
+        plugins: {
+          legend: { display: tokSeries.length > 1, position:'top',
+            labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, pointStyle:'circle', font:{size:10} } },
+          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y)}` } },
+        },
+        scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { callback: v => fmt(v) } } },
+      },
+    });
+  }
+}
+
+async function load(){
+  const range = $('range').value;
+  try{
+    // 顶部迷你图与主趋势图用同一粒度
+    const sparkBucket = ['today','1d','7d'].includes(range) ? 'hour' : 'day';
+    const [sum, ts, byModel, quota, costs, routes, health, traces, speed, alerts] = await Promise.all([
+      fetch(`/api/summary?range=${range}`).then(r=>r.json()),
+      fetch(`/api/timeseries?range=${range}&bucket=${sparkBucket}`).then(r=>r.json()),
+      fetch(`/api/usage?range=${range}&group_by=model`).then(r=>r.json()),
+      fetch(`/api/quota`).then(r=>r.json()),
+      fetch(`/api/costs?range=${range}`).then(r=>r.json()),
+      fetch(`/api/routes`).then(r=>r.json()),
+      fetch(`/api/upstreams/health`).then(r=>r.json()).catch(()=>[]),
+      fetch(`/api/traces?limit=20`).then(r=>r.json()).catch(()=>[]),
+      fetch(`/api/speed?limit=20`).then(r=>r.json()).catch(()=>({history:[]})),
+      fetch(`/api/alerts`).then(r=>r.json()).catch(()=>({enabled:false,items:[]})),
+    ]);
+
+    $('status').textContent = t('st.connected');
+    $('updated').textContent = new Date().toLocaleTimeString('zh-CN');
+
+    $('v-requests').textContent = fmt(sum.total_requests);
+    $('v-requests-sub').textContent =
+      `${t('w.success')} ${fmt(sum.total_requests - sum.failed_requests)} · ${t('w.failed')} ${sum.failed_requests} · ${t('w.sr')} ${sum.success_rate}%`;
+    $('v-tokens').textContent = fmt(sum.total_tokens);
+    const cache = sum.by_source.reduce((a,s)=>a+(s.cache_read||0),0);
+    const reason = sum.by_source.reduce((a,s)=>a+(s.reasoning||0),0);
+    $('v-tokens-sub').textContent = `${t('w.cache')} ${fmt(cache)} · ${t('w.reasoning')} ${fmt(reason)}`;
+    $('v-rpm').textContent = sum.rpm;
+    $('v-tpm').textContent = fmt(sum.tpm);
+    $('v-cache').textContent = sum.cache_rate + '%';
+
+    // 生成速度
+    const tps = sum.tok_per_sec || 0;
+    $('v-tps').textContent = tps > 0 ? tps.toFixed(1) : '0';
+    const lat = sum.avg_latency_ms || 0;
+    $('v-tps-sub').textContent = lat > 0
+      ? `tok/s · ${t('w.avg_lat')} ${lat >= 1000 ? (lat/1000).toFixed(1) + 's' : Math.round(lat) + 'ms'}`
+      : `tok/s · ${t('w.nodata')}`;
+
+    // 总成本（原价）+ 平均单价
+    const totalCost = sum.total_cost_usd || 0;
+    const monthly = sum.monthly_fee_usd || 0;
+    $('v-cost').textContent = '$' + totalCost.toFixed(4);
+    $('v-cost-sub').textContent = sum.total_requests
+      ? `${fmt(sum.total_requests)} ${t('w.requests')} · ${t('w.official')}`
+      : t('w.official');
+
+    // 平均每百万 token 多少钱
+    const mTokens = (sum.total_tokens || 0) / 1e6;
+    if (mTokens > 0) {
+      $('v-unit').textContent = '$' + (totalCost / mTokens).toFixed(2);
+      $('v-unit-sub').textContent = `共 ${fmt(sum.total_tokens)} tokens`;
+    } else {
+      $('v-unit').textContent = '$0';
+      $('v-unit-sub').textContent = '暂无数据';
+    }
+
+    const unpriced = sum.unpriced_requests || 0;
+    if (unpriced > 0) {
+      $('v-cost-sub').textContent += ` · ${unpriced} ${t('w.unpriced')}`;
+    }
+    if (monthly > 0) {
+      $('v-cost-sub').textContent += ` · ${t('w.monthly')} $${monthly.toFixed(0)}`;
+    }
+
+    // 按来源
+    const modeLabel = { payg: t('mode.payg'), subscription: t('mode.subscription'), free: t('mode.free') };
+    const modeColor = { payg: '#10b981', subscription: '#8b5cf6', free: '#8b909a' };
+    $('tb-source').innerHTML = sum.by_source.length ? sum.by_source.map(s=>{
+      const tk = (s.input||0)+(s.output||0)+(s.cache_read||0);
+      const perM = tk > 0 ? (s.cost_usd||0) / (tk/1e6) : 0;
+      const tps = s.tok_per_sec || 0;
+      return `<tr><td><span class="tag">${s.source}</span></td>
+      <td><span style="font-size:11.5px;color:${modeColor[s.billing_mode]||'#8b909a'}">${modeLabel[s.billing_mode]||s.billing_mode}</span></td>
+      <td class="num">${fmt(s.requests)}</td>
+      <td class="num">${fmt(s.input)}</td>
+      <td class="num">${fmt(s.output)}</td>
+      <td class="num">${fmt(s.cache_read)}</td>
+      <td class="num" style="color:#10b981;font-weight:600">${tps > 0 ? tps.toFixed(1) : '—'}</td>
+      <td class="num" style="font-weight:600">$${(s.cost_usd||0).toFixed(4)}</td>
+      <td class="num" style="color:#8b909a">$${perM.toFixed(2)}</td></tr>`;
+    }).join('')
+      : '<tr><td colspan="9" class="empty">' + t('w.nodata') + '</td></tr>';
+
+    // 成本明细
+    $('tb-cost').innerHTML = costs.length ? costs.slice(0,15).map(c=>`
+      <tr><td><span class="tag">${c.source}</span></td>
+      <td>${c.model||'—'}</td>
+      <td class="num">${fmt(c.requests)}</td>
+      <td class="num">${fmt(c.input)}</td>
+      <td class="num">${fmt(c.output)}</td>
+      <td class="num">${c.cost > 0 ? '$'+c.cost.toFixed(5) : '<span style="color:#8b909a">—</span>'}</td>
+      <td class="num">${c.cost > 0 ? '$'+c.avg_cost_per_request.toFixed(6) : '—'}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="empty">' + t('w.nodata') + '</td></tr>';
+
+    $('tb-model').innerHTML = byModel.length ? byModel.slice(0,12).map(m=>`
+      <tr><td>${m.grp}</td>
+      <td class="num">${fmt(m.requests)}</td>
+      <td class="num">${fmt(m.input)}</td>
+      <td class="num">${fmt(m.output)}</td>
+      <td class="num">${fmt(m.reasoning)}</td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">' + t('w.nodata') + '</td></tr>';
+
+    $('tb-key').innerHTML = sum.by_client_key.length ? sum.by_client_key.map(k=>`
+      <tr><td><span class="tag">${k.client_key}</span></td>
+      <td class="num">${fmt(k.requests)}</td>
+      <td class="num">${fmt(k.tokens)}</td>
+      <td class="num">$${(k.cost||0).toFixed(4)}</td></tr>`).join('')
+      : '<tr><td colspan="4" class="empty">' + t('w.nodata') + '</td></tr>';
+
+    // 上游健康状态
+    $('tb-health').innerHTML = (health || []).map(h => {
+      const ok = !h.in_cooldown;
+      const dot = ok
+        ? `<span style="color:#10b981">${t('h.ok')}</span>`
+        : `<span style="color:#ef4444">${t('h.cooldown')} ${h.cooldown_remaining_sec}s</span>`;
+      const rate = h.success_rate;
+      const rateColor = rate >= 99 ? '#10b981' : rate >= 90 ? '#f59e0b' : '#ef4444';
+      const err = h.last_error
+        ? `<span style="color:#8b909a;font-size:11.5px">${h.last_error.slice(0, 60)}</span>`
+        : '—';
+      return `<tr><td><span class="tag">${h.alias || h.name}</span></td>
+        <td style="font-size:12px;color:#8b909a">${h.name}</td>
+        <td>${dot}</td>
+        <td class="num">${h.total_requests || 0}</td>
+        <td class="num" style="color:${rateColor};font-weight:600">${rate}%</td>
+        <td class="num">${h.last_latency_ms ? h.last_latency_ms.toFixed(0) + 'ms' : '—'}</td>
+        <td>${err}</td></tr>`;
+    }).join('') || '<tr><td colspan="7" class="empty">' + t('w.nodata') + '</td></tr>';
+
+    // 生成速度
+    const spd = (speed && speed.history) || [];
+    $('speed-avg').textContent = spd.length
+      ? t('w.speed_avg', spd.length, (speed.recent_tok_per_sec || 0).toFixed(1))
+      : t('w.nodata');
+    $('tb-speed').innerHTML = spd.length ? spd.map(x => {
+      const time = new Date(x.ts * 1000).toLocaleTimeString('zh-CN');
+      const total = x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1) + 's' : Math.round(x.latency_ms) + 'ms';
+      const ttft = x.ttft_ms != null ? Math.round(x.ttft_ms) + 'ms' : '—';
+      const tps = x.tok_per_sec || 0;
+      const gtps = x.gen_tok_per_sec || 0;
+      const color = tps >= 40 ? '#10b981' : tps >= 15 ? '#f59e0b' : '#ef4444';
+      return `<tr><td style="font-size:12px;color:#8b909a">${time}</td>
+        <td><span class="tag">${x.source}</span></td>
+        <td style="font-size:12px">${x.model}</td>
+        <td class="num">${fmt(x.output_tokens)}</td>
+        <td class="num">${total}</td>
+        <td class="num" style="color:#8b909a">${ttft}</td>
+        <td class="num" style="color:${color};font-weight:600">${tps.toFixed(1)}</td>
+        <td class="num" style="color:#8b909a">${gtps.toFixed(1)}</td></tr>`;
+    }).join('') : '<tr><td colspan="8" class="empty">' + t('w.nodata') + '</td></tr>';
+
+    // 链路追踪
+    $('tb-traces').innerHTML = (traces || []).map(t => {
+      const time = new Date(t.ts * 1000).toLocaleTimeString('zh-CN');
+      const statusColor = t.status < 400 ? '#10b981' : '#ef4444';
+      // 把 spans 压成一行：upstream=3181ms parse=13ms
+      const chain = (t.spans || [])
+        .filter(s => s.duration_ms != null && s.name !== 'receive' && s.name !== 'route')
+        .map(s => {
+          const w = Math.min(100, Math.max(1, s.duration_ms / Math.max(1, t.total_ms) * 100));
+          const color = s.error ? '#ef4444' : s.name === 'upstream' ? '#3b82f6' : '#8b5cf6';
+          return `<span title="${s.name}: ${s.duration_ms}ms${s.error ? '\n' + s.error : ''}"
+                    style="display:inline-block;width:${w}px;height:6px;background:${color};border-radius:2px;margin-right:1px;vertical-align:middle"></span>`;
+        }).join('');
+      return `<tr><td style="font-size:12px;color:#8b909a">${time}</td>
+        <td><span class="tag">${t.source || '—'}</span></td>
+        <td style="font-size:12px">${t.model || '—'}</td>
+        <td class="num" style="color:${statusColor};font-weight:600">${t.status}</td>
+        <td class="num">${t.total_ms != null ? t.total_ms.toFixed(0) + 'ms' : '—'}</td>
+        <td>${chain}</td></tr>`;
+    }).join('') || `<tr><td colspan="6" class="empty">${t('w.notrace')}</td></tr>`;
+
+    // 模型路由表
+    $('tb-routes').innerHTML = routes.map(r => {
+      const sample = r.models && r.models.length ? `${r.alias}/${r.models[0]}` : '—';
+      return `<tr><td><span class="tag">${r.alias}</span></td>
+        <td>${r.name}</td>
+        <td class="num">${r.models ? r.models.length : 0}</td>
+        <td style="color:#8b909a;font-size:12px">${sample}</td></tr>`;
+    }).join('') || `<tr><td colspan="4" class="empty">${t('w.noroutes')}</td></tr>`;
+
+    // 额度：按来源分组，每组一张卡片
+    const groups = {};
+    for (const q of quota) {
+      (groups[q.source] = groups[q.source] || []).push(q);
+    }
+    const srcLabel = {
+      'antigravity': t('src.antigravity'),
+      'mistral': t('src.mistral'),
+      'opencode': t('src.opencode'),
+      'relay-axon': t('src.axon'),
+    };
+    // 最高的渠道排最前（多列布局下它独占左列，其余堆右列，两边高度接近）
+    const groupEntries = Object.entries(groups).sort((a, b) => {
+      const rows = g => g[1].filter(i => !String(i.window||'').startsWith('model:')).length;
+      return rows(b) - rows(a);
+    });
+    let quotaHtml = '';
+    for (const [src, items] of groupEntries) {
+      // 过滤掉 model: 前缀的细粒度条目，只保留主要窗口
+      const main = items.filter(i => !String(i.window||'').startsWith('model:'));
+      if (!main.length) continue;
+
+      // 按账号分组
+      const byAccount = {};
+      for (const i of main) (byAccount[i.account||'—'] = byAccount[i.account||'—'] || []).push(i);
+
+      quotaHtml += `<div class="quota-card"><div class="quota-title">${srcLabel[src]||src}</div>`;
+      for (const [acct, wins] of Object.entries(byAccount)) {
+        quotaHtml += `<div class="quota-acct">${acct}</div>
+          <table class="qtable qfix"><colgroup>
+            <col style="width:36%"><col style="width:33%"><col style="width:14%"><col style="width:17%">
+          </colgroup><thead><tr><th>${t('q.window')}</th><th>${t('q.remaining')}</th><th class="num">${t('q.value')}</th><th>${t('q.reset')}</th></tr></thead><tbody>`;
+        for (const w of wins) {
+          const pct = w.remaining_pct;
+          const lvl = w.level || 'ok';
+          const color = pct==null ? '#8b909a' : pct<20 ? '#ef4444' : pct<50 ? '#f59e0b' : '#10b981';
+          const bar = pct!=null ? `<div style="background:#eceef2;border-radius:3px;height:5px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div></div>` : '—';
+          const val = pct!=null ? pct.toFixed(1)+'%'
+            : (w.remaining_amt!=null ? (w.currency||'')+' '+w.remaining_amt.toFixed(2) : '—');
+          const rowCls = lvl==='critical' ? 'lvl-critical' : lvl==='warn' ? 'lvl-warn' : '';
+          const badge = lvl==='critical' ? ` <span style="color:#ef4444;font-size:10.5px">${t('q.critical')}</span>`
+            : lvl==='warn' ? ` <span style="color:#f59e0b;font-size:10.5px">${t('q.warn')}</span>` : '';
+          quotaHtml += `<tr class="${rowCls}"><td>${w.window||'—'}${badge}</td><td>${bar}</td>
+            <td class="num" style="color:${color};font-weight:600">${val}</td>
+            <td style="color:#8b909a;font-size:11px;white-space:nowrap">${fmtTime(w.resets_at)}</td></tr>`;
+        }
+        quotaHtml += `</tbody></table>`;
+      }
+      quotaHtml += `</div>`;
+    }
+    $('quota-groups').innerHTML = quotaHtml || `<div class="empty">${t('w.noquota')}</div>`;
+
+    // 额度告警横幅
+    renderAlerts(alerts);
+
+    // 热力图（365 天）
+    renderHeatmap(sum.heatmap || []);
+
+    // 健康时间线
+    await loadHealthTimeline();
+
+    // 模型线条选择 + 4 张趋势图
+    try {
+      activeModels = await fetch(`/api/models/active?range=${range}`).then(r=>r.json());
+      // 清理已不存在的选中项
+      const valid = new Set(activeModels.map(modelKey));
+      selectedModels = selectedModels.filter(k => valid.has(k));
+      renderLinePicker();
+      await loadTrendCharts();
+    } catch(e) { console.error('trend charts failed', e); }
+
+    // 迷你图（顶部卡片）
+    const labels = ts.map(t=>t.bucket);
+    const reqData = ts.map(t=>t.requests);
+    const tokData = ts.map(t=>t.input+t.output+t.cache_read);
+    if (sparkReq) sparkReq.destroy();
+    if (sparkTok) sparkTok.destroy();
+    sparkReq = makeSpark($('spark-requests'), '#3b82f6');
+    sparkReq.data.labels = labels; sparkReq.data.datasets[0].data = reqData; sparkReq.update();
+    sparkTok = makeSpark($('spark-tokens'), '#8b5cf6');
+    sparkTok.data.labels = labels; sparkTok.data.datasets[0].data = tokData; sparkTok.update();
+
+  }catch(e){
+    $('status').textContent = t('st.disconnected');
+    console.error(e);
+  }
+}
+
+// ====== 多语言（中 / EN）：按钮真正切换全部文案 ======
+const I18N_ZH = {};
+document.querySelectorAll('[data-i18n]').forEach(el => { I18N_ZH[el.dataset.i18n] = el.textContent; });
+document.querySelectorAll('[data-i18n-ph]').forEach(el => { I18N_ZH[el.dataset.i18nPh] = el.placeholder; });
+document.querySelectorAll('[data-i18n-title]').forEach(el => { I18N_ZH[el.dataset.i18nTitle] = el.title; });
+// 动态文案（不出现在静态 HTML 里）的中词条
+Object.assign(I18N_ZH, {
+  'st.connected': '已连接', 'st.disconnected': '连接失败',
+  'w.success': '成功', 'w.failed': '失败', 'w.sr': '成功率', 'w.cache': '缓存',
+  'w.reasoning': '推理', 'w.avg_lat': '平均延迟', 'w.nodata': '暂无数据',
+  'w.requests': '次请求', 'w.official': '按官方 API 价折算', 'w.unpriced': '条无价格',
+  'w.monthly': '订阅月费', 'w.speed_avg': '最近 {0} 次平均 {1} tok/s',
+  'mode.payg': '按量', 'mode.subscription': '订阅', 'mode.free': '免费',
+  'h.ok': '● 正常', 'h.cooldown': '● 冷却',
+  'u.day': '天', 'u.hour': '小时', 'u.min': '分钟',
+  'reset.soon': '即将重置', 'reset.days': '{0} 天后重置',
+  'reset.hours': '{0} 小时后重置', 'reset.minutes': '{0} 分钟后重置',
+  'alert.summary': '{0} 项告急 · {1} 项偏低', 'alert.threshold': '（阈值 ≤{0}% 提醒，≤{1}% 告急）',
+  'htl.none': '无请求', 'htl.tip': '{0}  共 {1} 次 · 成功 {2} · 失败 {3} · {4} tokens',
+  'htl.stats': '{0} 次 · 成功率 {1}% · {2}/{3} 格有活动',
+  'q.window': '窗口', 'q.remaining': '剩余', 'q.value': '数值', 'q.reset': '重置',
+  'q.critical': '告急', 'q.warn': '偏低',
+  'w.notrace': '暂无追踪数据', 'w.noroutes': '暂无上游', 'w.noquota': '暂无额度数据',
+  'lp.none': '当前范围没有请求记录', 'lp.selected': '已选 {0} / {1}', 'lp.total': '共 {0} 个模型',
+  'tok.input': '输入', 'tok.output': '输出', 'tok.cache': '缓存',
+  'tok.reasoning': '推理', 'tok.cost': '成本',
+  'src.antigravity': 'Antigravity (Google 订阅)', 'src.mistral': 'Mistral',
+  'src.opencode': 'OpenCode Zen / Go', 'src.axon': 'axon 中转站',
+  'l.total': '共', 'l.calls': '次', 'l.prompt': '总输入', 'l.hit': '命中',
+  'l.output': '输出', 'l.cost': '本次费用', 'l.saved': '省', 'l.saved_total': '缓存省下',
+  'l.unpriced': '未定价', 'l.unpriced_tip': '这些记录的模型不在价格表中',
+  'l.key': 'key', 'l.collector': '本地采集', 'l.estimated': '估算',
+  'l.new': '新', 'l.write': '写', 'l.think': '含思考', 'l.ttft': '首字',
+  'l.exporting': '导出中…',
+  'b.input': '未命中新输入', 'b.cache_read': '缓存读取命中', 'b.cache_write': '缓存写入创建',
+  'b.output': '模型生成输出', 'b.multiplier': '时段倍率', 'b.official_total': '官方牌价合计',
+  'b.saved': '本次缓存省下', 'b.billing': '计费口径',
+  'b.sub_note': '订阅制：按官方价折算等效价值，不产生额外支出',
+  'b.free_note': '免费渠道：费用仅作参考',
+  'b.noprice': '该模型不在价格表中，无法计价',
+  'b.from_record': '记录值', 'b.from_computed': '按当前价格表补算',
+  'b.req_model': '请求模型', 'b.account': '账号', 'b.total_ms': '总耗时',
+  'b.gen_speed': '纯生成', 'b.trace': '链路',
+  'page.info': '第 {0} / {1} 页 · 共 {2} 条',
+});
+
+const I18N_EN = {
+  'tab.overview': 'Overview', 'tab.logs': 'Call Logs',
+  'range.today': 'Today', 'range.1d': 'Last 24h', 'range.7d': 'Last 7 days',
+  'range.30d': 'Last 30 days', 'range.all': 'All time',
+  'btn.refresh': '↻ Refresh', 'btn.export': '⬇ Export CSV',
+  'st.connecting': 'Connecting', 'st.connected': 'Connected', 'st.disconnected': 'Connection failed',
+  'hdr.updated': 'Updated: ',
+  'c.requests': 'Total Requests', 'c.tokens': 'Total Tokens',
+  'c.rpm_sub': 'requests / min', 'c.tpm_sub': 'tokens / min',
+  'c.cache': 'Cache Rate', 'c.cache_sub': 'cache hit share',
+  'c.tps': 'Gen Speed', 'c.cost': 'Total Cost (list)', 'c.unit': 'Avg Price',
+  'c.unit_sub': 'per 1M tokens',
+  's.htl': 'Request Health Timeline',
+  's.htl_desc1': 'Last', 's.htl_desc2': ', each cell', 's.htl_desc3': 'min; read column by column, top to bottom then left to right',
+  'htl.6h': '6 hours', 'htl.24h': '24 hours',
+  'htl.l_ok': 'ok', 'htl.l_part': 'partial fail', 'htl.l_all': 'all fail', 'htl.l_none': 'idle',
+  's.trend': 'Token Composition',
+  's.trend_desc': 'Input / output / cache / reasoning tokens over time (stacked)',
+  's.trend_empty': 'Not enough data points (only 1 bucket so far) — keep running to see the trend',
+  's.cost_trend': 'Cost Trend', 's.cost_trend_desc': 'USD cost over time',
+  's.lp': 'Chart Line Picker', 's.lp_desc': 'Pick models to compare in trend charts.',
+  's.req_trend': 'Request Trend', 's.req_trend_desc': 'Requests over time',
+  's.tok_trend': 'Token Trend', 's.tok_trend_desc': 'Total tokens over time',
+  's.heat': 'Activity Heatmap',
+  's.heat_desc': 'Daily token usage over the last 365 days; darker means more',
+  's.by_source': 'By Source', 's.by_source_desc': 'Usage and cost per upstream',
+  's.cost_detail': 'Cost Detail (upstream × model)',
+  's.cost_detail_desc': 'The same model prices differently per upstream; costed by the upstream actually called',
+  's.by_model': 'By Model', 's.by_model_desc': 'Top models by usage',
+  's.by_key': 'By Client Key', 's.by_key_desc': 'Usage and cost per key',
+  's.health': 'Upstream Health',
+  's.health_desc': 'Failure counts, cooldown state and success rate. Failover is off by default: failures return errors immediately.',
+  's.speed': 'Generation Speed', 's.speed_desc': 'tok/s of the last 20 successful requests, ',
+  's.traces': 'Request Tracing',
+  's.traces_desc': 'Per-stage latency of the last 20 requests, for hunting slow calls',
+  's.routes': 'Model Routing',
+  's.routes_desc1': 'Use', 's.routes_desc2': 'to pick an upstream; unavailable models are hidden automatically',
+  's.quota': 'Quota / Balance',
+  's.quota_desc': 'Quota snapshots from each upstream, grouped by source; below threshold they turn red and raise alerts',
+  'th.source': 'Source', 'th.type': 'Mode', 'th.requests': 'Requests', 'th.input': 'Input',
+  'th.output': 'Output', 'th.cache': 'Cache', 'th.speed': 'Speed', 'th.cost': 'Cost',
+  'th.cost_list': 'Cost (list)', 'th.per_mtok': 'Per 1M tok', 'th.upstream': 'Upstream',
+  'th.model': 'Model',
+  'th.chan_model': 'Channel / Model', 'th.cache_hit': 'Cache Hit', 'th.speed_lat': 'Speed / Latency',
+  'th.avg_cost': 'Avg / call', 'th.reasoning': 'Reasoning', 'th.key': 'Key', 'th.tokens': 'Tokens',
+  'th.status': 'Status', 'th.sr': 'Success', 'th.latency': 'Latency', 'th.last_err': 'Last error',
+  'th.time': 'Time', 'th.total_ms': 'Total', 'th.ttft': 'TTFT', 'th.gen_tps': 'Gen tok/s',
+  'th.chain': 'Trace', 'th.prefix': 'Prefix', 'th.models_n': 'Models', 'th.sample': 'Example',
+  'th.total': 'Total Tokens', 'th.cost_this': 'Cost',
+  'logs.title': 'Call Logs',
+  'logs.desc': 'Per-call token breakdown, cache hits and cost; click any row to expand its bill and timing trace',
+  'logs.search_ph': 'search models…',
+  'l.channel_all': 'Channel: all', 'l.key_all': 'Key: all',
+  'origin.gateway': 'Gateway live', 'origin.collector': 'Local collector', 'origin.all': 'All origins',
+  'status.all': 'All statuses', 'status.success': 'Success only', 'status.error': 'Errors only',
+  'auto.title': 'Auto refresh', 'auto.off': 'Auto refresh: off', 'auto.5': 'Every 5s',
+  'auto.15': 'Every 15s', 'auto.60': 'Every 60s',
+  'page.prev': 'Prev', 'page.next': 'Next',
+  'page.info': 'Page {0} / {1} · {2} records',
+  'alert.title': '⚠ Quota Alerts',
+  'alert.summary': '{0} critical · {1} low',
+  'alert.threshold': ' (warn ≤{0}%, critical ≤{1}%)',
+  'reset.soon': 'resets soon', 'reset.days': 'resets in {0} d',
+  'reset.hours': 'resets in {0} h', 'reset.minutes': 'resets in {0} min',
+  'w.success': 'ok', 'w.failed': 'failed', 'w.sr': 'success', 'w.cache': 'cached',
+  'w.reasoning': 'reasoning', 'w.avg_lat': 'avg latency', 'w.nodata': 'No data',
+  'w.requests': 'requests', 'w.official': 'at official API prices', 'w.unpriced': 'unpriced',
+  'w.monthly': '· subscription mo.', 'w.speed_avg': 'Avg {1} tok/s over last {0}',
+  'mode.payg': 'payg', 'mode.subscription': 'subscription', 'mode.free': 'free',
+  'h.ok': '● OK', 'h.cooldown': '● cooldown',
+  'u.day': 'd', 'u.hour': 'h', 'u.min': 'min',
+  'htl.none': 'no requests',
+  'htl.tip': '{0}  {1} reqs · ok {2} · fail {3} · {4} tokens',
+  'htl.stats': '{0} reqs · {1}% ok · {2}/{3} active cells',
+  'q.window': 'Window', 'q.remaining': 'Remaining', 'q.value': 'Value', 'q.reset': 'Resets',
+  'q.critical': 'critical', 'q.warn': 'low',
+  'w.notrace': 'No trace data', 'w.noroutes': 'No upstreams', 'w.noquota': 'No quota data',
+  'lp.none': 'No requests in this range',
+  'lp.selected': '{0} / {1} selected', 'lp.total': '{0} models total',
+  'tok.input': 'Input', 'tok.output': 'Output', 'tok.cache': 'Cache',
+  'tok.reasoning': 'Reasoning', 'tok.cost': 'Cost',
+  'src.antigravity': 'Antigravity (Google sub.)', 'src.mistral': 'Mistral',
+  'src.opencode': 'OpenCode Zen / Go', 'src.axon': 'axon relay',
+  'l.total': 'Total', 'l.calls': 'calls', 'l.prompt': 'Input', 'l.hit': 'Hit rate',
+  'l.output': 'Output', 'l.cost': 'Cost', 'l.saved': 'Saved', 'l.saved_total': 'Saved by cache',
+  'l.unpriced': 'unpriced',
+  'l.unpriced_tip': 'Models missing from the price table',
+  'l.key': 'key', 'l.collector': 'collector', 'l.estimated': 'estimated',
+  'l.new': 'new', 'l.write': 'write', 'l.think': 'thinking', 'l.ttft': 'TTFT',
+  'l.exporting': 'Exporting…',
+  'b.input': 'New (uncached) input', 'b.cache_read': 'Cache read (hit)',
+  'b.cache_write': 'Cache write (creation)', 'b.output': 'Output generation',
+  'b.multiplier': 'Time multiplier', 'b.official_total': 'Official list-price total',
+  'b.saved': 'Saved by cache on this call', 'b.billing': 'Billing',
+  'b.sub_note': 'subscription: valued at list price, no extra spend',
+  'b.free_note': 'free channel: cost for reference only',
+  'b.noprice': 'model not in price table — cannot price',
+  'b.from_record': 'as recorded', 'b.from_computed': 'computed from current price table',
+  'b.req_model': 'requested', 'b.account': 'account', 'b.total_ms': 'total',
+  'b.gen_speed': 'gen', 'b.trace': 'trace',
+};
+
+let LANG = localStorage.getItem('ug_lang') || 'zh';
+function t(key, ...args){
+  const dict = LANG === 'en' ? I18N_EN : null;
+  let s = (dict && dict[key] != null ? dict[key] : I18N_ZH[key]);
+  if (s == null) s = key;
+  args.forEach((v, i) => { s = s.replaceAll('{' + i + '}', v); });
+  return s;
+}
+function applyStaticText(){
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    el.textContent = LANG === 'en' ? (I18N_EN[k] ?? I18N_ZH[k] ?? el.textContent) : (I18N_ZH[k] ?? el.textContent);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    const k = el.dataset.i18nPh;
+    if (I18N_ZH[k] != null) el.placeholder = LANG === 'en' ? (I18N_EN[k] || I18N_ZH[k]) : I18N_ZH[k];
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const k = el.dataset.i18nTitle;
+    if (I18N_ZH[k] != null) el.title = LANG === 'en' ? (I18N_EN[k] || I18N_ZH[k]) : I18N_ZH[k];
+  });
+  document.querySelectorAll('[data-lang]').forEach(p => p.classList.toggle('active', p.dataset.lang === LANG));
+}
+document.querySelectorAll('[data-lang]').forEach(pill => {
+  pill.onclick = () => {
+    if (pill.dataset.lang === LANG) return;
+    LANG = pill.dataset.lang;
+    localStorage.setItem('ug_lang', LANG);
+    applyStaticText();
+    if (logsState.lastData && currentTab === 'logs') renderLogs(logsState.lastData);
+    if (currentTab === 'overview') load();
+  };
+});
+
+// ====== Tab 切换：概览 | 调用明细 ======
+let currentTab = 'overview';
+document.querySelectorAll('.tab[data-tab]').forEach(tab => {
+  tab.onclick = () => {
+    const id = tab.dataset.tab;
+    if (id === currentTab) return;
+    currentTab = id;
+    document.querySelectorAll('.tab[data-tab]').forEach(x => x.classList.toggle('active', x === tab));
+    $('view-overview').style.display = id === 'overview' ? '' : 'none';
+    $('view-logs').style.display = id === 'logs' ? '' : 'none';
+    if (id === 'logs') loadLogs();
+    else load();
+  };
+});
+
+// ====== 调用明细（Sub2API 风格逐笔日志）======
+const LOGS_PAGE_SIZE = 50;
+const logsState = {
+  page: 1, pages: 1, total: 0, lastData: null,
+  expanded: new Set(),        // 展开账单的记录 id（刷新后保持展开）
+  timer: null, fetching: false,
+};
+const traceCache = {};        // trace_id -> Promise（展开行时按需拉链路）
+
+function fmtCost(v){
+  if (v == null || typeof v !== 'number' || isNaN(v)) return null;
+  if (v >= 0.01)   return '$' + v.toFixed(4);
+  if (v >= 0.0001) return '$' + v.toFixed(5);
+  if (v > 0)       return '$' + v.toFixed(6);
+  return '$0';
+}
+function fmtCost6(v){ return '$' + Number(v || 0).toFixed(6); }
+
+function lParams(){
+  const p = new URLSearchParams();
+  p.set('range', $('l-range').value);
+  if ($('l-source').value) p.set('source', $('l-source').value);
+  if ($('l-key').value) p.set('client_key', $('l-key').value);
+  if ($('l-model').value.trim()) p.set('model', $('l-model').value.trim());
+  p.set('status', $('l-status').value);
+  p.set('origin', $('l-origin').value);
+  p.set('page', logsState.page);
+  p.set('page_size', LOGS_PAGE_SIZE);
+  return p;
+}
+
+async function loadLogs(){
+  if (logsState.fetching) return;
+  logsState.fetching = true;
+  try{
+    const data = await fetch('/api/logs?' + lParams()).then(r => r.json());
+    logsState.lastData = data;
+    logsState.total = data.total || 0;
+    logsState.pages = Math.max(1, data.pages || 1);
+    renderLogs(data);
+  }catch(e){ console.error('loadLogs failed', e); }
+  finally{ logsState.fetching = false; }
+}
+
+function renderLogs(data){
+  const s = data.summary || {};
+  const items = data.items || [];
+  const cost = fmtCost(s.cost_usd);
+  const saved = fmtCost(s.cache_saved_usd);
+  $('l-summary').innerHTML = [
+    `${t('l.total')} <b>${fmt(s.requests)}</b> ${t('l.calls')}` +
+      (s.failed ? ` · <span style="color:var(--red)">${t('w.failed')} ${fmt(s.failed)}</span>` : ''),
+    `${t('l.prompt')} <b>${fmt(s.prompt_tokens)}</b>`,
+    `${t('l.hit')} <b>${s.cache_rate}%</b>`,
+    `${t('l.output')} <b>${fmt(s.output)}</b>`,
+    `${t('l.cost')} <b style="color:var(--orange)">${cost ?? '—'}</b>`,
+    saved ? `${t('l.saved_total')} <b style="color:var(--green)">${saved}</b>` : '',
+    s.unpriced_requests ? `<span title="${t('l.unpriced_tip')}">${t('l.unpriced')} ${fmt(s.unpriced_requests)}</span>` : '',
+  ].filter(Boolean).join('');
+
+  $('tb-logs').innerHTML = items.length
+    ? items.map((x, i) => logRowHtml(x, i)).join('')
+    : `<tr><td colspan="9" class="empty">${t('w.nodata')}</td></tr>`;
+
+  document.querySelectorAll('#tb-logs tr.log-row').forEach(tr => {
+    tr.onclick = () => {
+      const i = tr.dataset.i;
+      const x = logsState.lastData.items[i];
+      const detail = $('log-detail-' + i);
+      if (!detail) return;
+      const open = detail.classList.toggle('open');
+      tr.classList.toggle('expanded', open);
+      if (open){ logsState.expanded.add(x.id); fillLogDetail(i); }
+      else logsState.expanded.delete(x.id);
+    };
+  });
+  // 自动刷新后保持已展开的账单
+  items.forEach((x, i) => {
+    if (logsState.expanded.has(x.id)){
+      const detail = $('log-detail-' + i);
+      if (detail){ detail.classList.add('open'); fillLogDetail(i); }
+    }
+  });
+
+  $('l-pageinfo').textContent = t('page.info', data.page, logsState.pages, fmt(data.total));
+  $('l-prev').classList.toggle('disabled', data.page <= 1);
+  $('l-next').classList.toggle('disabled', data.page >= logsState.pages);
+}
+
+function logRowHtml(x, i){
+  const d = new Date(x.ts * 1000);
+  const tstr = $('l-range').value === 'today'
+    ? d.toLocaleTimeString('zh-CN')
+    : d.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  const stColor = x.status < 400 ? 'var(--green)' : 'var(--red)';
+  const prompt = x.prompt_tokens || 0;
+  const hit = x.cache_rate || 0;
+  const hitBadge = prompt > 0
+    ? `<span class="badge" style="background:${hit >= 50 ? '#d1fae5' : hit > 0 ? '#fef3c7' : '#eceef2'};color:${hit >= 50 ? '#059669' : hit > 0 ? '#b45309' : '#8b909a'}">${hit}%</span>`
+    : '';
+  const cost = fmtCost(x.cost_usd);
+  const saved = x.breakdown && x.breakdown.cache_saved_usd > 0 ? fmtCost(x.breakdown.cache_saved_usd) : null;
+  const speed = x.tok_per_sec != null ? x.tok_per_sec.toFixed(1) : '—';
+  const speedColor = x.tok_per_sec == null ? 'var(--muted)'
+    : x.tok_per_sec >= 40 ? 'var(--green)' : x.tok_per_sec >= 15 ? 'var(--orange)' : 'var(--red)';
+  const lat = x.latency_ms != null
+    ? (x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1)+'s' : Math.round(x.latency_ms)+'ms')
+    : '—';
+  const ttft = x.ttft_ms != null ? Math.round(x.ttft_ms)+'ms' : '—';
+  const subBits = [
+    x.client_key ? `${t('l.key')} ${x.client_key}` : t('l.collector'),
+    t('mode.' + (x.billing_mode || 'payg')),
+    x.estimated ? t('l.estimated') : '',
+  ].filter(Boolean).join(' · ');
+  return `<tr class="log-row" data-i="${i}">
+    <td style="font-size:12px;color:var(--muted);white-space:nowrap">${tstr}</td>
+    <td style="max-width:230px">
+      <span class="tag">${x.alias || x.source}</span> <span style="font-size:12.5px">${x.model || '—'}</span>
+      <div class="cellsub">${subBits}</div>
+    </td>
+    <td class="num" style="color:${stColor};font-weight:600">${x.status}</td>
+    <td class="num">${fmt(prompt)}<div class="cellsub">${t('l.new')} ${fmt(x.input_tokens || 0)}</div></td>
+    <td class="num">${fmt(x.cache_read || 0)} ${hitBadge}${x.cache_write ? `<div class="cellsub">${t('l.write')} ${fmt(x.cache_write)}</div>` : ''}</td>
+    <td class="num">${fmt(x.output_tokens || 0)}${x.reasoning ? `<div class="cellsub">${t('l.think')} ${fmt(x.reasoning)}</div>` : ''}</td>
+    <td class="num" style="font-weight:600">${fmt(x.total_tokens || 0)}</td>
+    <td class="num cost">${cost ?? '—'}${saved ? `<div class="cellsub" style="color:var(--green)">${t('l.saved')} ${saved}</div>` : ''}</td>
+    <td class="num"><span style="color:${speedColor};font-weight:600">${speed}</span><div class="cellsub">${t('l.ttft')} ${ttft} · ${lat}</div></td>
+  </tr>
+  <tr class="log-detail" id="log-detail-${i}"><td colspan="9"><div class="log-bill"></div></td></tr>`;
+}
+
+async function fillLogDetail(i){
+  const x = logsState.lastData && logsState.lastData.items[i];
+  const box = document.querySelector(`#log-detail-${i} .log-bill`);
+  if (!box || !x) return;
+  const b = x.breakdown;
+  const srcNote = x.cost_source === 'recorded' ? t('b.from_record')
+    : x.cost_source === 'computed' ? t('b.from_computed') : t('b.noprice');
+  let html = `
+    <div class="bill-row" style="font-size:13.5px">
+      <span class="k" style="color:var(--text);font-weight:700">${t('l.cost')}</span>
+      <span class="v" style="color:var(--orange);font-size:16px">${fmtCost(x.cost_usd) ?? '—'}
+        <span style="font-size:11px;color:var(--muted);font-weight:400">（${srcNote}）</span></span>
+    </div>`;
+  if (b){
+    const u = b.units;
+    html += `
+      <div class="bill-row"><span class="k">${t('b.input')} · ${fmt(x.input_tokens || 0)} tok × $${u.input} / 1M</span><span class="v">${fmtCost6(b.input_cost)}</span></div>
+      <div class="bill-row"><span class="k">${t('b.cache_read')} · ${fmt(x.cache_read || 0)} tok × $${u.cache_read} / 1M</span><span class="v">${fmtCost6(b.cache_read_cost)}</span></div>
+      ${x.cache_write ? `<div class="bill-row"><span class="k">${t('b.cache_write')} · ${fmt(x.cache_write)} tok × $${u.cache_write} / 1M</span><span class="v">${fmtCost6(b.cache_write_cost)}</span></div>` : ''}
+      <div class="bill-row"><span class="k">${t('b.output')} · ${fmt(x.output_tokens || 0)} tok × $${u.output} / 1M${x.reasoning ? `（${t('l.think')} ${fmt(x.reasoning)}）` : ''}</span><span class="v">${fmtCost6(b.output_cost)}</span></div>
+      ${b.multiplier !== 1 ? `<div class="bill-row"><span class="k">${t('b.multiplier')}</span><span class="v">× ${b.multiplier}</span></div>` : ''}
+      <div class="bill-row" style="border-top:1px dashed var(--line);margin-top:5px;padding-top:6px"><span class="k">${t('b.official_total')}</span><span class="v">${fmtCost6(b.total_cost)}</span></div>
+      ${b.cache_saved_usd > 0 ? `<div class="bill-row"><span class="k">${t('b.saved')}</span><span class="v" style="color:var(--green)">${fmtCost6(b.cache_saved_usd)}</span></div>` : ''}
+      <div class="bill-row"><span class="k">${t('b.billing')} <span class="tag">${t('mode.' + (x.billing_mode || 'payg'))}</span></span><span class="v" style="font-weight:400;color:var(--muted)">${x.billing_mode === 'subscription' ? t('b.sub_note') : x.billing_mode === 'free' ? t('b.free_note') : ''}</span></div>`;
+  }
+  const metaBits = [];
+  if (x.requested_model && x.requested_model !== x.model) metaBits.push(`${t('b.req_model')} ${x.requested_model}`);
+  if (x.account) metaBits.push(`${t('b.account')} ${x.account}`);
+  if (x.ttft_ms != null) metaBits.push(`${t('l.ttft')} ${Math.round(x.ttft_ms)}ms`);
+  if (x.latency_ms != null) metaBits.push(`${t('b.total_ms')} ${x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1)+'s' : Math.round(x.latency_ms)+'ms'}`);
+  if (x.gen_tok_per_sec != null) metaBits.push(`${t('b.gen_speed')} ${x.gen_tok_per_sec.toFixed(1)} tok/s`);
+  if (metaBits.length) html += `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${metaBits.join(' · ')}</div>`;
+  html += `<div id="log-trace-${i}" style="margin-top:8px"></div>`;
+  box.innerHTML = html;
+
+  // 按需拉取链路耗时
+  if (x.trace_id){
+    if (!traceCache[x.trace_id]){
+      traceCache[x.trace_id] = fetch(`/api/traces/${x.trace_id}`).then(r => r.json()).catch(() => null);
+    }
+    const tr = await traceCache[x.trace_id];
+    const el = $('log-trace-' + i);
+    if (el && tr && Array.isArray(tr.spans)){
+      const chain = tr.spans.filter(sp => sp.duration_ms != null).map(sp => {
+        const w = Math.min(100, Math.max(1, sp.duration_ms / Math.max(1, tr.total_ms) * 100));
+        const color = sp.error ? '#ef4444' : sp.name === 'upstream' ? '#3b82f6' : '#8b5cf6';
+        return `<span title="${sp.name}: ${sp.duration_ms}ms${sp.error ? '\n' + sp.error : ''}"
+                  style="display:inline-block;width:${w}px;height:6px;background:${color};border-radius:2px;margin-right:1px;vertical-align:middle"></span>`;
+      }).join('');
+      el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;font-size:12px">
+        <span style="color:var(--muted)">${t('b.trace')}</span>${chain}
+        <span style="color:var(--muted)">${tr.total_ms != null ? tr.total_ms.toFixed(0) + 'ms' : ''}</span></div>`;
+    }
+  }
+}
+
+async function exportLogs(){
+  const btn = $('l-export');
+  const orig = btn.textContent;
+  btn.textContent = t('l.exporting');
+  try{
+    const all = [];
+    const maxRows = 5000;
+    for (let p = 1; p <= 10 && all.length < maxRows; p++){
+      const params = lParams();
+      params.set('page', p);
+      params.set('page_size', 500);
+      const data = await fetch('/api/logs?' + params).then(r => r.json());
+      all.push(...(data.items || []));
+      if (!data.items || !data.items.length || all.length >= (data.total || 0)) break;
+    }
+    const head = ['time','source','alias','model','requested_model','client_key','status',
+      'prompt_tokens','uncached_input','cache_read','cache_write','output_tokens','reasoning',
+      'total_tokens','cache_rate_pct','cost_usd','ttft_ms','latency_ms','tok_per_sec'];
+    const lines = [head.join(',')];
+    for (const x of all){
+      const row = [
+        new Date(x.ts * 1000).toISOString(), x.source, x.alias, x.model, x.requested_model,
+        x.client_key, x.status, x.prompt_tokens, x.input_tokens, x.cache_read, x.cache_write,
+        x.output_tokens, x.reasoning, x.total_tokens, x.cache_rate,
+        x.cost_usd != null ? x.cost_usd : '', x.ttft_ms ?? '', x.latency_ms ?? '', x.tok_per_sec ?? '',
+      ];
+      lines.push(row.map(v => (typeof v === 'string' && /[",\n]/.test(v)) ? '"' + v.replace(/"/g, '""') + '"' : v).join(','));
+    }
+    const blob = new Blob(['\ufeff' + lines.join('\n')], {type: 'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `usage-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } finally {
+    btn.textContent = orig;
+  }
+}
+
+async function populateLogFilters(){
+  try{
+    const routes = await fetch('/api/routes').then(r => r.json());
+    const src = $('l-source');
+    for (const r of routes){
+      const opt = document.createElement('option');
+      opt.value = r.name;
+      opt.textContent = `${r.alias || r.name} · ${r.name}`;
+      src.appendChild(opt);
+    }
+    const keys = await fetch('/api/usage?range=all&group_by=client_key').then(r => r.json());
+    const keySel = $('l-key');
+    for (const k of keys){
+      if (!k.grp || k.grp === '(unknown)') continue;
+      const opt = document.createElement('option');
+      opt.value = k.grp;
+      opt.textContent = `${k.grp} · ${fmt(k.requests)}`;
+      keySel.appendChild(opt);
+    }
+  }catch(e){ console.error('populate log filters failed', e); }
+}
+
+$('l-range').onchange = $('l-source').onchange = $('l-key').onchange =
+$('l-origin').onchange = $('l-status').onchange =
+  () => { logsState.page = 1; loadLogs(); };
+let lSearchTimer = null;
+$('l-model').oninput = () => {
+  clearTimeout(lSearchTimer);
+  lSearchTimer = setTimeout(() => { logsState.page = 1; loadLogs(); }, 400);
+};
+$('l-model').onkeydown = e => { if (e.key === 'Enter'){ clearTimeout(lSearchTimer); logsState.page = 1; loadLogs(); } };
+$('l-reload').onclick = () => loadLogs();
+$('l-export').onclick = exportLogs;
+$('l-prev').onclick = () => { if (logsState.page > 1){ logsState.page--; loadLogs(); } };
+$('l-next').onclick = () => { if (logsState.page < logsState.pages){ logsState.page++; loadLogs(); } };
+$('l-auto').onchange = () => {
+  if (logsState.timer){ clearInterval(logsState.timer); logsState.timer = null; }
+  const sec = parseInt($('l-auto').value, 10);
+  if (sec > 0){
+    logsState.timer = setInterval(() => {
+      if (currentTab === 'logs' && !document.hidden) loadLogs();
+    }, sec * 1000);
+  }
+};
+
+applyStaticText();
+populateLogFilters();
+$('l-auto').dispatchEvent(new Event('change'));
+
+$('refresh').onclick = () => currentTab === 'logs' ? loadLogs() : load();
+$('range').onchange = load;
+
+// 健康时间线的时间范围切换
+document.querySelectorAll('.htl-range').forEach(el => {
+  el.onclick = () => {
+    document.querySelectorAll('.htl-range').forEach(x => x.classList.remove('active'));
+    el.classList.add('active');
+    htlMinutes = parseInt(el.dataset.min, 10);
+    loadHealthTimeline();
+  };
+});
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
