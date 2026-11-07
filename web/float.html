@@ -12,37 +12,39 @@
     overflow: hidden;
     user-select: none;
   }
+  /* 与看板同款浅色卡片：同色板 / 圆角 / 阴影 / 等宽数字 */
   #win {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: rgba(20, 22, 28, 0.92);
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 12px;
-    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
-    color: #e8eaed;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid #e8eaee;
+    border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(16, 24, 40, 0.18);
+    color: #1a1d23;
     overflow: hidden;
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(14px);
   }
   #drag {
     height: 26px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 8px 0 10px;
+    padding: 0 6px 0 11px;
     cursor: move;
-    background: rgba(255,255,255,0.04);
+    background: #f8f9fb;
+    border-bottom: 1px solid #eef0f3;
     flex-shrink: 0;
   }
-  #title { font-size: 10.5px; color: #8b909a; letter-spacing: .3px; }
+  #title { font-size: 10px; color: #8b909a; letter-spacing: .12em; font-weight: 700; }
   #btns { display: flex; gap: 4px; }
   .btn {
-    width: 16px; height: 16px; border: none; border-radius: 4px;
-    background: rgba(255,255,255,0.08); color: #b0b4bc;
+    width: 17px; height: 17px; border: none; border-radius: 5px;
+    background: rgba(26, 29, 35, 0.06); color: #6b7078;
     font-size: 10px; line-height: 1; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
   }
-  .btn:hover { background: rgba(255,255,255,0.16); color: #fff; }
+  .btn:hover { background: rgba(26, 29, 35, 0.12); color: #1a1d23; }
   .btn.close:hover { background: #ef4444; color: #fff; }
 
   #main {
@@ -56,7 +58,7 @@
   }
   #tps {
     font-size: 42px;
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1;
     letter-spacing: -1.5px;
     color: #10b981;
@@ -80,7 +82,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  #meta b { color: #9aa0a8; font-weight: 500; }
+  #meta b { color: #4a4f57; font-weight: 600; }
 
   #spark {
     height: 22px;
@@ -96,20 +98,20 @@
     background: #10b981;
     border-radius: 1px 1px 0 0;
     min-height: 1px;
-    opacity: .55;
+    opacity: .5;
     transition: height .3s, opacity .3s;
   }
   #spark i:last-child { opacity: 1; }
 
   #status {
     font-size: 9px;
-    color: #4a4f57;
+    color: #9aa0a8;
     text-align: center;
     padding-bottom: 3px;
     flex-shrink: 0;
   }
   #status.err { color: #ef4444; }
-  .idle #tps { color: #4a4f57; }
+  .idle #tps { color: #c9ced6; }
 </style>
 </head>
 <body>
@@ -226,7 +228,7 @@ async function poll() {
     $('meta').innerHTML =
       `<b>${latest.source}</b> · ↑${fmtK(prompt)} 命中${hit}% · ↓${fmtK(latest.output_tokens)}<br>` +
       `${lat} · 首字 ${ttft} · 均 ${avg.toFixed(1)}` +
-      (cost ? ` · <span style="color:#fbbf24;font-weight:600">${cost}</span>` : '');
+      (cost ? ` · <span style="color:#f59e0b;font-weight:700">${cost}</span>` : '');
 
     if (isNew) {
       $('win').animate(
