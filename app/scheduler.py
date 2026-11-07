@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -166,11 +167,33 @@ class Scheduler:
             self.alerter.evaluate(items)
 
 
+def _window_span_hours(window: str) -> float | None:
+    """从窗口名推断重置周期（小时），认不出来返回 None。
+
+    例：'5h' / 'Claude and GPT models:5h' → 5，'weekly' → 168，'monthly' → 720。
+    """
+    w = (window or "").lower()
+    m = re.search(r"(\d+(?:\.\d+)?)\s*h(?:\b|$)", w)
+    if m:
+        return float(m.group(1))
+    m = re.search(r"(\d+(?:\.\d+)?)\s*d(?:\b|$)", w)
+    if m:
+        return float(m.group(1)) * 24
+    if "week" in w:
+        return 168.0
+    if "month" in w:
+        return 720.0
+    if "day" in w:
+        return 24.0
+    return None
+
+
 def compute_burn(conn, hours: int = 48, min_span_hours: float = 6.0) -> dict[tuple[str, str, str], dict]:
     """按最近 N 小时快照计算每个池子的燃烧率。
 
-    返回 {(source, account, window): {"per_day": 每天掉的百分点, "days_left": 预计耗尽天数}}。
-    数据不足（样本 < 2 或跨度 < 6 小时）、未在消耗、或刚重置过的窗口不返回。
+    返回 {(source, account, window): {"per_hour", "per_day", "hours_left", "days_left"}}，
+    单位是「百分点/小时」。短周期窗口（如 5h）允许更短的样本跨度，否则它永远等不到 6 小时。
+    数据不足（样本 < 2 或跨度不够）、未在消耗、或刚重置过的窗口不返回。
     """
     since = int(time.time()) - hours * 3600
     rows = conn.execute(
@@ -197,16 +220,21 @@ def compute_burn(conn, hours: int = 48, min_span_hours: float = 6.0) -> dict[tup
         if len(seg) < 2:
             continue
         span_h = (seg[-1][0] - seg[0][0]) / 3600
-        if span_h < min_span_hours:
+        # 5h 这类短窗口整个周期都不到 6 小时，按周期放宽样本跨度
+        period_h = _window_span_hours(k[2])
+        span_floor = 1.0 if period_h is not None and period_h <= 24 else min_span_hours
+        if span_h < span_floor:
             continue
         drop = seg[0][1] - seg[-1][1]
         if drop <= 0.2:
             continue
-        per_day = drop * 24 / span_h
-        days_left = min(seg[-1][1] / per_day, 365.0) if per_day > 0.05 else None
+        per_hour = drop / span_h
+        hours_left = seg[-1][1] / per_hour
         out[k] = {
-            "per_day": round(per_day, 3),
-            "days_left": round(days_left, 1) if days_left is not None else None,
+            "per_hour": round(per_hour, 4),
+            "per_day": round(per_hour * 24, 3),
+            "hours_left": round(min(hours_left, 365.0 * 24), 1),
+            "days_left": round(min(hours_left / 24, 365.0), 1),
         }
     return out
 
@@ -277,6 +305,18 @@ def load_quota_items(store: Store, stale_sec: int) -> list[QuotaItem]:
         ))
         b = burn.get((r["source"], r["account"] or "", r["window"] or ""))
         if b:
-            items[-1].burn_per_day = b["per_day"]
-            items[-1].days_left = b["days_left"]
+            q = items[-1]
+            q.burn_per_hour = b["per_hour"]
+            q.burn_per_day = b["per_day"]
+            q.hours_left = b["hours_left"]
+            q.days_left = b["days_left"]
+            # 有重置时间就换算到「重置前预计剩多少」——直接拿百分比当天数用会误导：
+            # 5h 窗口还剩 99% 不代表能用 97 天，重置前它只用掉零点几个点。
+            if q.resets_at:
+                hours_to_reset = (int(q.resets_at) - now) / 3600
+                if hours_to_reset > 0:
+                    q.hours_to_reset = round(hours_to_reset, 1)
+                    projected = q.remaining_pct - b["per_hour"] * hours_to_reset
+                    q.projected_pct = round(max(0.0, min(100.0, projected)), 1)
+                    q.exhaust_before_reset = projected <= 0
     return items

@@ -889,9 +889,21 @@ def quota(request: Request):
             d["level"] = "warn"
         else:
             d["level"] = "ok"
-        # 燃烧率：按当前速率 3 天内耗尽且还没到告警阈值的，按 warn 提示
-        if d.get("days_left") is not None and d["days_left"] <= 3 and d["level"] == "ok":
-            d["level"] = "warn"
+        # 燃烧率：按当前速率会在重置前耗尽（48h 内）且还没到告警阈值的，按 warn 提示。
+        # 有重置时间的窗口不再拿「百分比折算的天数」判断，5h/周/月限的量纲不一样。
+        if d.get("level") == "ok":
+            if (
+                d.get("exhaust_before_reset")
+                and d.get("hours_left") is not None
+                and d["hours_left"] <= 48
+            ):
+                d["level"] = "warn"
+            elif (
+                d.get("hours_to_reset") is None
+                and d.get("days_left") is not None
+                and d["days_left"] <= 3
+            ):
+                d["level"] = "warn"
         out.append(d)
     return out
 

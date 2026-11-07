@@ -60,8 +60,13 @@ class QuotaItem:
     level: int = LEVEL_OK
     stale: bool = False
     # 燃烧率：按近期消耗速度预测
-    burn_per_day: float | None = None   # 每天掉的百分点
-    days_left: float | None = None      # 按当前速率预计耗尽天数
+    burn_per_hour: float | None = None  # 每小时掉的百分点
+    burn_per_day: float | None = None   # 每天掉的百分点（= per_hour × 24）
+    hours_left: float | None = None     # 按当前速率预计耗尽小时数
+    days_left: float | None = None      # 同上，换算成天（不考虑重置）
+    hours_to_reset: float | None = None     # 距离窗口重置还有多少小时
+    projected_pct: float | None = None      # 按当前速率到重置时预计还剩多少
+    exhaust_before_reset: bool = False      # 会不会在重置前耗尽
 
     @property
     def key(self) -> tuple[str, str, str]:
@@ -83,8 +88,13 @@ class QuotaItem:
             "ts": self.ts,
             "level": LEVEL_NAMES.get(self.level, "ok"),
             "stale": self.stale,
+            "burn_per_hour": self.burn_per_hour,
             "burn_per_day": self.burn_per_day,
+            "hours_left": self.hours_left,
             "days_left": self.days_left,
+            "hours_to_reset": self.hours_to_reset,
+            "projected_pct": self.projected_pct,
+            "exhaust_before_reset": self.exhaust_before_reset,
         }
 
 
@@ -157,7 +167,13 @@ def build_message(kind: str, item: QuotaItem) -> str:
     else:
         head = f"🟠 额度偏低：{item.label} 剩 {pct}"
     tail = " ".join(x for x in (_fmt_amount(item), _fmt_reset(item.resets_at)) if x)
-    if item.days_left is not None and item.days_left <= 30:
+    if item.exhaust_before_reset and item.hours_left is not None:
+        # 只报「重置前真的会用完」的预测；百分比/天数在没有重置时间时才有意义
+        if item.hours_left >= 48:
+            tail += f" · 按当前速率约 {item.hours_left / 24:.1f} 天耗尽"
+        else:
+            tail += f" · 按当前速率约 {item.hours_left:.0f} 小时耗尽"
+    elif item.hours_to_reset is None and item.days_left is not None and item.days_left <= 30:
         tail += f" · 按当前速率约 {item.days_left:.1f} 天耗尽"
     return f"{head} {tail}".strip()
 
@@ -183,15 +199,21 @@ class QuotaAlerter:
                 continue
 
             level = classify(item.remaining_pct, self.cfg)
-            # 燃烧率预警：还没到告警阈值，但按当前速率 3 天内耗尽 → 提前预警
-            if (
-                level == LEVEL_OK
-                and not item.stale
-                and item.days_left is not None
-                and item.days_left <= 3
-                and item.remaining_pct <= 90
-            ):
-                level = LEVEL_WARN
+            # 燃烧率预警：还没到告警阈值，但按当前速率会在重置前耗尽（48h 内）
+            # → 提前预警。有重置时间时不再用「天数」判断，避免 5h 窗口误报。
+            if level == LEVEL_OK and item.remaining_pct <= 90:
+                if (
+                    item.exhaust_before_reset
+                    and item.hours_left is not None
+                    and item.hours_left <= 48
+                ):
+                    level = LEVEL_WARN
+                elif (
+                    item.hours_to_reset is None
+                    and item.days_left is not None
+                    and item.days_left <= 3
+                ):
+                    level = LEVEL_WARN
             item.level = level
             state = self.states.get(item.key)
             if state is None:

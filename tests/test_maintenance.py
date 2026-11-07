@@ -156,6 +156,45 @@ class BurnRateTest(unittest.TestCase):
         self.assertAlmostEqual(it.burn_per_day, 25.0, delta=1.0)
         store.close()
 
+    def test_burn_short_window_uses_reset_projection(self):
+        """5h 窗口：样本跨度不到 6h 也要能算；剩 90% 但 3h 后重置，
+        不能把它当成「还能用 18 小时/几十天」，要换算成重置前预计剩余。"""
+        tmp = Path(tempfile.mkdtemp(prefix="ugburn3-"))
+        store = Store(tmp / "usage.db")
+        now = int(time.time())
+        # 2 小时掉 10 个点 → 5 点/小时；还剩 90%，重置在 3 小时后
+        for h, pct in ((2 * 3600, 100.0), (3600, 95.0), (0, 90.0)):
+            store.insert_quota([QuotaSnapshot(
+                ts=now - h, source="opencode", account="a", window="5h",
+                remaining_pct=pct, resets_at=now + 3 * 3600,
+            )])
+        items = load_quota_items(store, stale_sec=10800)
+        it = [x for x in items if x.window == "5h"][0]
+        self.assertAlmostEqual(it.burn_per_hour, 5.0, delta=0.1)
+        self.assertAlmostEqual(it.hours_left, 18.0, delta=0.5)
+        self.assertFalse(it.exhaust_before_reset)
+        self.assertAlmostEqual(it.projected_pct, 75.0, delta=1.0)
+        self.assertAlmostEqual(it.hours_to_reset, 3.0, delta=0.1)
+        # 原来的「天数」仍保留在 API 里，但不参与有重置时间的判断
+        self.assertAlmostEqual(it.days_left, 0.75, delta=0.1)
+        store.close()
+
+    def test_burn_flags_exhaust_before_reset(self):
+        tmp = Path(tempfile.mkdtemp(prefix="ugburn4-"))
+        store = Store(tmp / "usage.db")
+        now = int(time.time())
+        # 2 小时掉 80 个点 → 40 点/小时；还剩 20%，重置在 3 小时后
+        for h, pct in ((2 * 3600, 100.0), (3600, 60.0), (0, 20.0)):
+            store.insert_quota([QuotaSnapshot(
+                ts=now - h, source="opencode", account="a", window="5h",
+                remaining_pct=pct, resets_at=now + 3 * 3600,
+            )])
+        items = load_quota_items(store, stale_sec=10800)
+        it = [x for x in items if x.window == "5h"][0]
+        self.assertTrue(it.exhaust_before_reset)
+        self.assertAlmostEqual(it.hours_left, 0.5, delta=0.1)
+        store.close()
+
     def test_burn_skipped_when_not_draining(self):
         tmp = Path(tempfile.mkdtemp(prefix="ugburn2-"))
         store = Store(tmp / "usage.db")
