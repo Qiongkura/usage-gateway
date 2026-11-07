@@ -35,9 +35,9 @@ token / 缓存命中 / 费用都被逐笔记录，配一个自带「调用明细
 
 ![链路追踪](docs/screenshots/traces.png)
 
-**tok/s 悬浮小窗：实时生成速度 + 最近一笔的 token 与费用**
+**tok/s 液态玻璃悬浮小窗：实时生成速度 + 最近一笔的 token 与费用**
 
-![悬浮窗](docs/screenshots/float-widget.png)
+![悬浮窗](docs/screenshots/float-glass.png)
 
 ## 特性
 
