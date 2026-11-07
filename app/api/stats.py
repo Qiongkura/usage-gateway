@@ -514,7 +514,7 @@ def logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
 ):
-    """逐笔调用明细（Sub2API 风格日志）：每次请求的 token 构成、缓存命中率与单次费用。
+    """逐笔调用明细：每次请求的 token 构成、缓存命中率与单次费用。
 
     origin:
       gateway   —— 经过网关的实时调用（有 client_key / 延迟 / 链路追踪）
