@@ -1160,7 +1160,7 @@ Object.assign(I18N_ZH, {
   'l.unpriced': '未定价', 'l.unpriced_tip': '这些记录的模型不在价格表中',
   'l.key': 'key', 'l.collector': '本地采集', 'l.estimated': '估算',
   'l.new': '新', 'l.write': '写', 'l.think': '含思考', 'l.ttft': '首字',
-  'l.with_ttft': '含首字',
+  'l.with_ttft': '含首字', 'l.total': '总',
   'l.exporting': '导出中…',
   'b.input': '未命中新输入', 'b.cache_read': '缓存读取命中', 'b.cache_write': '缓存写入创建',
   'b.output': '模型生成输出', 'b.multiplier': '时段倍率', 'b.official_total': '官方牌价合计',
@@ -1264,7 +1264,7 @@ const I18N_EN = {
   'l.unpriced_tip': 'Models missing from the price table',
   'l.key': 'key', 'l.collector': 'collector', 'l.estimated': 'estimated',
   'l.new': 'new', 'l.write': 'write', 'l.think': 'thinking', 'l.ttft': 'TTFT',
-  'l.with_ttft': 'with TTFT',
+  'l.with_ttft': 'with TTFT', 'l.total': 'total',
   'l.exporting': 'Exporting…',
   'b.input': 'New (uncached) input', 'b.cache_read': 'Cache read (hit)',
   'b.cache_write': 'Cache write (creation)', 'b.output': 'Output generation',
@@ -1439,7 +1439,14 @@ function logRowHtml(x, i){
   const lat = x.latency_ms != null
     ? (x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1)+'s' : Math.round(x.latency_ms)+'ms')
     : '—';
-  const ttft = x.ttft_ms != null ? Math.round(x.ttft_ms)+'ms' : '—';
+  const ttft = x.ttft_ms != null
+    ? (x.ttft_ms >= 1000 ? (x.ttft_ms/1000).toFixed(1)+'s' : Math.round(x.ttft_ms)+'ms')
+    : '—';
+  // 服务端在生成窗口 < 0.5s 时会把 gen 退回总体均值——此时小字不再重复「含首字」
+  const fallback = x.gen_tok_per_sec != null && x.tok_per_sec != null
+    && Math.abs(x.gen_tok_per_sec - x.tok_per_sec) < 0.005;
+  const withTtft = !fallback && x.tok_per_sec != null
+    ? ` · ${t('l.with_ttft')} ${x.tok_per_sec.toFixed(1)}` : '';
   const subBits = [
     x.client_key ? `${t('l.key')} ${x.client_key}` : t('l.collector'),
     t('mode.' + (x.billing_mode || 'payg')),
@@ -1457,7 +1464,7 @@ function logRowHtml(x, i){
     <td class="num">${fmt(x.output_tokens || 0)}${x.reasoning ? `<div class="cellsub">${t('l.think')} ${fmt(x.reasoning)}</div>` : ''}</td>
     <td class="num" style="font-weight:600">${fmt(x.total_tokens || 0)}</td>
     <td class="num cost">${cost ?? '—'}${saved ? `<div class="cellsub" style="color:var(--green)">${t('l.saved')} ${saved}</div>` : ''}</td>
-    <td class="num"><span style="color:${speedColor};font-weight:600">${speed}</span><div class="cellsub">${t('l.ttft')} ${ttft} · ${lat} · ${t('l.with_ttft')} ${x.tok_per_sec != null ? x.tok_per_sec.toFixed(1) : '—'}</div></td>
+    <td class="num"><span style="color:${speedColor};font-weight:600">${speed}</span><div class="cellsub">${t('l.ttft')} ${ttft} · ${t('l.total')} ${lat}${withTtft}</div></td>
   </tr>
   <tr class="log-detail" id="log-detail-${i}"><td colspan="9"><div class="log-bill"></div></td></tr>`;
 }
@@ -1508,7 +1515,7 @@ async function fillLogDetail(i){
   const metaBits = [];
   if (x.requested_model && x.requested_model !== x.model) metaBits.push(`${t('b.req_model')} ${x.requested_model}`);
   if (x.account) metaBits.push(`${t('b.account')} ${x.account}`);
-  if (x.ttft_ms != null) metaBits.push(`${t('l.ttft')} ${Math.round(x.ttft_ms)}ms`);
+  if (x.ttft_ms != null) metaBits.push(`${t('l.ttft')} ${x.ttft_ms >= 1000 ? (x.ttft_ms/1000).toFixed(1)+'s' : Math.round(x.ttft_ms)+'ms'}`);
   if (x.latency_ms != null) metaBits.push(`${t('b.total_ms')} ${x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1)+'s' : Math.round(x.latency_ms)+'ms'}`);
   if (x.gen_tok_per_sec != null) metaBits.push(`${t('b.gen_speed')} ${x.gen_tok_per_sec.toFixed(1)} tok/s`);
   if (metaBits.length) html += `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${metaBits.join(' · ')}</div>`;
