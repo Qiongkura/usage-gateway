@@ -1066,7 +1066,11 @@ async function load(){
           <table class="qtable qfix"><colgroup>
             <col style="width:36%"><col style="width:33%"><col style="width:14%"><col style="width:17%">
           </colgroup><thead><tr><th>${t('q.window')}</th><th>${t('q.remaining')}</th><th class="num">${t('q.value')}</th><th>${t('q.reset')}</th></tr></thead><tbody>`;
-        for (const w of wins) {
+        // Gemini 4 Argon 置顶：最关心的窗口放最上面，其余保持原顺序
+        const sortedWins = [...wins].sort((a, b) =>
+          (String(a.window || '').includes('Argon') ? 0 : 1) -
+          (String(b.window || '').includes('Argon') ? 0 : 1));
+        for (const w of sortedWins) {
           const pct = w.remaining_pct;
           const lvl = w.level || 'ok';
           const color = pct==null ? '#8b909a' : pct<20 ? '#ef4444' : pct<50 ? '#f59e0b' : '#10b981';
