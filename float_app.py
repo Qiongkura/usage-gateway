@@ -183,8 +183,8 @@ def _setup():
 webview.create_window(
     "tok/s",
     "http://127.0.0.1:9000/float",
-    width=264,
-    height=238,
+    width=300,
+    height=292,
     frameless=True,
     transparent=True,
     js_api=Api(),

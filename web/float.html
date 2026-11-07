@@ -126,31 +126,46 @@
   #spark i:last-child { opacity: 1; }
 
   #meta {
+    width: 100%;
     font-size: 10.5px;
     color: rgba(26, 29, 35, 0.72);
-    text-align: center;
-    line-height: 1.55;
-    width: 100%;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    gap: 2.5px;
+  }
+  #meta .row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     white-space: nowrap;
+  }
+  #meta .k {
+    width: 30px;
+    flex: none;
+    color: rgba(26, 29, 35, 0.45);
+    font-size: 9.5px;
+    letter-spacing: .08em;
+  }
+  #meta .v {
+    flex: 1;
+    text-align: right;
+    color: #3b4048;
+    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-variant-numeric: tabular-nums;
   }
-  #meta b { color: #1a1d23; font-weight: 650; }
-  #meta .muted { color: rgba(26, 29, 35, 0.45); }
-  .costpill {
+  #meta .v .costpill {
     display: inline-block;
-    margin-top: 4px;
-    padding: 1.5px 10px;
+    padding: 0.5px 8px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.7);
+    background: rgba(245, 158, 11, 0.14);
     color: #b45309;
     font-weight: 700;
     font-size: 10px;
     font-variant-numeric: tabular-nums;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   }
+  #meta .v .dim { color: rgba(26, 29, 35, 0.45); font-weight: 500; }
 
   #status {
     position: absolute;
@@ -190,7 +205,13 @@
     <div id="tps">—</div>
     <div id="unit">TOK/S</div>
     <div id="spark"></div>
-    <div id="meta">等待请求…</div>
+    <div id="meta">
+      <div class="row"><span class="k">模型</span><span class="v" id="m-model">—</span></div>
+      <div class="row"><span class="k">输入</span><span class="v" id="m-in">—</span></div>
+      <div class="row"><span class="k">输出</span><span class="v" id="m-out">—</span></div>
+      <div class="row"><span class="k">耗时</span><span class="v" id="m-lat">—</span></div>
+      <div class="row"><span class="k">费用</span><span class="v" id="m-cost">—</span></div>
+    </div>
   </div>
 
   <div id="status"><span class="sdot"></span><span id="status-text">连接中…</span></div>
@@ -302,7 +323,9 @@ async function poll() {
     if (!latest) {
       $('main').classList.add('idle');
       $('tps').textContent = '—';
-      $('meta').textContent = '还没有请求';
+      for (const id of ('m-model m-in m-out m-lat m-cost').split(' ')) {
+        $(id).textContent = '—';
+      }
       return;
     }
 
@@ -329,15 +352,21 @@ async function poll() {
       : '—';
     const avg = latest.tok_per_sec || 0;
 
-    // 单次调用的 token 构成 + 缓存命中 + 费用
+    // 单次调用的完整数据：token 构成 / 缓存命中 / 思考 / 费用，一项不截断
     const prompt = (latest.input_tokens || 0) + (latest.cache_read || 0) + (latest.cache_write || 0);
     const hit = prompt > 0 ? Math.round((latest.cache_read || 0) / prompt * 100) : 0;
     const cost = fmtCost(latest.cost_usd);
+    const outBits = [`↓${fmtK(latest.output_tokens)}`];
+    if (latest.reasoning) outBits.push(`思考${fmtK(latest.reasoning)}`);
+    if (latest.cache_write) outBits.push(`写${fmtK(latest.cache_write)}`);
 
-    $('meta').innerHTML =
-      `<b>${latest.source}</b> · ↑${fmtK(prompt)} 命中${hit}% · ↓${fmtK(latest.output_tokens)}<br>` +
-      `<span class="muted">${lat} · 首字 ${ttft} · 均 ${avg.toFixed(1)}</span>` +
-      (cost ? `<br><span class="costpill">${cost}</span>` : '');
+    $('m-model').textContent = `${latest.source}/${latest.model || '?'}`;
+    $('m-in').innerHTML = `↑${fmtK(prompt)} <span class="dim">· 命中${hit}% · 新${fmtK(latest.input_tokens || 0)}</span>`;
+    $('m-out').innerHTML = `${outBits.join(' · ')}`;
+    $('m-lat').innerHTML = `${lat} <span class="dim">· 首字 ${ttft} · 均 ${avg.toFixed(1)}</span>`;
+    $('m-cost').innerHTML = cost
+      ? `<span class="costpill">${cost}</span>${latest.gen_tok_per_sec ? ` <span class="dim">· 生成 ${latest.gen_tok_per_sec.toFixed(1)}</span>` : ''}`
+      : '—';
 
     if (isNew) {
       $('win').animate(
