@@ -200,12 +200,19 @@ def load_model_health(path: Path) -> dict[str, dict[str, dict]]:
         return {}
 
 
+# 只有「模型确实不存在」才隐藏。429 / 超时 / 5xx / 400 都是瞬时的，
+# 一次探测被限流就把模型锁死一周（探测本身会并发打几十个模型，很容易 429）。
+HIDDEN_STATUSES = {"gone", "not_found"}
+
+
 def apply_model_health(upstreams: list[Upstream], health: dict[str, dict[str, dict]]) -> None:
-    """把探测结果应用到上游，标记不可用模型。"""
+    """把探测结果应用到上游，只隐藏确定不存在的模型。"""
     for up in upstreams:
         records = health.get(up.name) or {}
-        bad = {m for m, r in records.items() if (r or {}).get("status") != "ok"}
-        up.unavailable_models = bad
+        up.unavailable_models = {
+            m for m, r in records.items()
+            if (r or {}).get("status") in HIDDEN_STATUSES
+        }
 
 
 def _load_alerts(raw: dict[str, Any]) -> QuotaAlertConfig:

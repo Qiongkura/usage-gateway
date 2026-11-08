@@ -245,13 +245,17 @@ async def _handle(request: Request, path: str):
             status_code=400 if "must be prefixed" in route_error else 404,
         )
 
-    # 检查该模型是否被探测标记为不可用
+    # 检查该模型是否被探测标记为不可用（仅限 404/410 这类确定不存在的模型）
     if model in upstream.unavailable_models:
+        log.warning(
+            "[%s] rejected unavailable model '%s' (see model_health.json)",
+            upstream.name, model,
+        )
         return JSONResponse(
             {"error": {
                 "message": (
-                    f"Model '{model}' on upstream '{upstream.name}' is currently unavailable "
-                    f"(probe failed). Try another model or run: python -m app.probe_models"
+                    f"Model '{model}' on upstream '{upstream.name}' was reported gone/not-found "
+                    f"by the model probe. Try another model or run: python -m app.probe_models"
                 ),
                 "type": "invalid_request_error",
             }},

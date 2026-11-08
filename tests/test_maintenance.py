@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.api import stats as stats_api  # noqa: E402
 from app.alerts import QuotaAlerter, QuotaItem  # noqa: E402
 from app.collectors.vibe import VibeCollector  # noqa: E402
-from app.config import QuotaAlertConfig  # noqa: E402
+from app.config import QuotaAlertConfig, apply_model_health  # noqa: E402
 from app.db import Store  # noqa: E402
 from app.models import QuotaSnapshot, UsageRecord  # noqa: E402
 from app.scheduler import load_quota_items  # noqa: E402
@@ -136,6 +136,23 @@ class AdminAuthTest(unittest.TestCase):
             client.post("/api/admin/checkpoint?admin_key=secret-key").status_code,
             200,
         )
+
+
+class ModelHealthTest(unittest.TestCase):
+    def test_only_gone_and_not_found_hidden(self):
+        """429 / 超时 / 5xx 是瞬时的，不能因此把模型锁死一周。"""
+        up = SimpleNamespace(name="mistral", unavailable_models=set())
+        health = {"mistral": {
+            "ok-model": {"status": "ok"},
+            "gone-model": {"status": "gone", "code": 410},
+            "missing-model": {"status": "not_found", "code": 404},
+            "rate-limited-model": {"status": "rate_limited", "code": 429},
+            "slow-model": {"status": "timeout"},
+            "flaky-model": {"status": "server_error", "code": 503},
+            "bad-request-model": {"status": "error", "code": 400},
+        }}
+        apply_model_health([up], health)
+        self.assertEqual(up.unavailable_models, {"gone-model", "missing-model"})
 
 
 class BurnRateTest(unittest.TestCase):
