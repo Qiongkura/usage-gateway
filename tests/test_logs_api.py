@@ -93,6 +93,15 @@ class BreakdownTest(unittest.TestCase):
         self.assertIsNone(prices.breakdown("mistral", "no-such-model", 1, 1, at=at))
         self.assertIsNone(prices.breakdown("no-such-upstream", MODEL, 1, 1, at=at))
 
+    def test_zero_multiplier_is_not_defaulted_to_one(self):
+        prices = make_prices()
+        prices.table['mistral'][MODEL].multipliers = [{'factor': 0}]
+        at = datetime(2026, 11, 7, 12, tzinfo=timezone.utc)
+        self.assertEqual(prices.compute('mistral', MODEL, 1_000_000, 0, at=at), 0)
+        breakdown = prices.breakdown('mistral', MODEL, 0, 0, 1_000_000, at=at)
+        self.assertEqual(breakdown['multiplier'], 0)
+        self.assertEqual(breakdown['cache_saved_usd'], 0)
+
 
 class LogsApiTest(unittest.TestCase):
     def setUp(self):
@@ -149,6 +158,56 @@ class LogsApiTest(unittest.TestCase):
         self.assertAlmostEqual(s["cost_computed_usd"], 0.0076, places=8)
         self.assertAlmostEqual(s["cache_saved_usd"], 0.0144, places=8)
         self.assertEqual(s["unpriced_requests"], 0)
+        self.assertEqual(s["cache_saved_priced_requests"], 1)
+        self.assertEqual(s["cache_saved_unpriced_requests"], 0)
+
+    def test_cache_savings_coverage_is_independent_of_recorded_cost(self):
+        self.store.insert_usage([
+            rec(ts=self.now - 2, source='other', cache_read=1000, cost_usd=0.5),
+        ])
+        params = {"range": "1d", "origin": "all"}
+        summary = self.client.get('/api/logs', params=params).json()['summary']
+        self.assertEqual(summary['unpriced_requests'], 0)
+        self.assertEqual(summary['cache_saved_priced_requests'], 2)
+        self.assertEqual(summary['cache_saved_unpriced_requests'], 1)
+        self.assertAlmostEqual(summary['cache_saved_usd'], 0.0153)
+
+        self.app.state.cfg.prices = None
+        summary = self.client.get('/api/logs', params=params).json()['summary']
+        self.assertEqual(summary['cache_saved_priced_requests'], 0)
+        self.assertEqual(summary['cache_saved_unpriced_requests'], 3)
+        empty = self.client.get('/api/logs', params={**params, 'source': 'absent'}).json()['summary']
+        self.assertEqual(empty['cache_saved_priced_requests'], 0)
+        self.assertEqual(empty['cache_saved_unpriced_requests'], 0)
+        self.assertEqual(empty['cache_saved_usd'], 0)
+
+    def test_cache_savings_respects_minute_multiplier_boundaries(self):
+        hour = (self.now // 3600 - 1) * 3600
+        hour_text = datetime.fromtimestamp(hour, tz=timezone.utc).strftime('%H')
+        self.app.state.cfg.prices.table['mistral'][MODEL].multipliers = [
+            {'when': {'utc_hours': {'gte': f'{hour_text}:30', 'lt': f'{hour_text}:45'}}, 'factor': 2.0}
+        ]
+        self.store.insert_usage([
+            rec(ts=hour + minute * 60, cache_read=1_000_000, session_key='minute-test',
+                raw={'request_id': f'minute-{minute}'})
+            for minute in (29, 30, 44, 45)
+        ])
+        response = self.client.get('/api/logs', params={
+            'range': '1d', 'origin': 'all', 'session_key': 'minute-test',
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data['summary']['cache_saved_priced_requests'], 4)
+        self.assertAlmostEqual(data['summary']['cache_saved_usd'], 10.8)
+        self.assertAlmostEqual(data['summary']['cache_saved_usd'],
+                               sum(item['breakdown']['cache_saved_usd'] for item in data['items']))
+        self.app.state.cfg.prices.table['mistral'][MODEL].multipliers = [{'factor': 0}]
+        free = self.client.get('/api/logs', params={
+            'range': '1d', 'origin': 'all', 'session_key': 'minute-test',
+        }).json()
+        self.assertEqual(free['summary']['cache_saved_usd'], 0)
+        self.assertEqual(free['summary']['backfilled_requests'], 4)
+        self.assertEqual(free['summary']['cost_computed_usd'], 0)
 
     def test_logs_origin_filter(self):
         r = self.client.get("/api/logs", params={"range": "1d", "origin": "all"}).json()
@@ -190,11 +249,23 @@ class LogsApiTest(unittest.TestCase):
         r = self.client.get("/api/speed", params={"limit": 10}).json()
         latest = r["latest"]
         self.assertIsNotNone(latest)
+        self.assertIsInstance(latest["id"], int)
         self.assertIn("input_tokens", latest)
         self.assertIn("cache_read", latest)
         self.assertIn("cost_usd", latest)
         # 采集器记录没有延迟，不应出现在 speed 里
         self.assertTrue(all(x["latency_ms"] for x in r["history"]))
+
+    def test_speed_distinguishes_records_with_the_same_timestamp(self):
+        now = int(time.time())
+        self.store.insert_usage([
+            rec(ts=now, output_tokens=10, latency_ms=1000, raw={"request_id": "speed-a"}),
+            rec(ts=now, output_tokens=20, latency_ms=1000, raw={"request_id": "speed-b"}),
+        ])
+        rows = self.client.get('/api/speed', params={'limit': 2}).json()['history']
+        self.assertEqual([r['output_tokens'] for r in rows], [20, 10])
+        self.assertEqual(rows[0]['ts'], rows[1]['ts'])
+        self.assertNotEqual(rows[0]['id'], rows[1]['id'])
 
 
 if __name__ == "__main__":

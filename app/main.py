@@ -8,8 +8,12 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
+import time
+import traceback
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,8 +30,17 @@ from .collectors.opencode import OpenCodeCollector
 from .collectors.relay import RelayCollector
 from .collectors.vibe import VibeCollector
 from .collectors.zen import ZenUsageCollector
-from .config import apply_model_health, load_config, load_model_health
-from .db import Store
+from .config import (
+    MODEL_HEALTH_TTL,
+    apply_model_health,
+    is_loopback_host,
+    load_config,
+    load_model_health,
+)
+from .db import Store, session_context
+from .models import UsageRecord
+from .tracing import Trace
+from .session_attribution import SessionAttributor, validate_session_id
 from .health import HealthTracker
 from .pricing import load_prices
 from .proxy import close_http, extract_key, forward_with_failover, unauthorized
@@ -44,6 +57,15 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 # 由 main() 在启动时注入，供 /api/admin/shutdown 优雅退出使用
 _UVICORN_SERVER = None
+
+
+def _safe_exception_context(exc: Exception) -> str:
+    """Return useful location metadata without leaking exception messages."""
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return type(exc).__name__
+    frame = frames[-1]
+    return f"{type(exc).__name__} at {Path(frame.filename).name}:{frame.name}:{frame.lineno}"
 
 
 def build_collectors(cfg) -> list[Collector]:
@@ -99,10 +121,29 @@ def build_collectors(cfg) -> list[Collector]:
 
 async def discover_models(cfg) -> None:
     """启动时为没有显式配置 models 的上游拉取模型列表。"""
+    from .probe_models import probe_lock, load_cooldowns
+
+    with probe_lock(cfg) as acquired:
+        if not acquired:
+            log.warning("probe lock busy; skipping startup model discovery")
+            return
+        try:
+            cooldowns = load_cooldowns(cfg)
+        except (OSError, ValueError):
+            log.error("cannot read probe cooldown state; skipping startup model discovery")
+            return
+        await _discover_models_locked(cfg, cooldowns)
+
+
+async def _discover_models_locked(cfg, cooldowns) -> None:
     import httpx
+    from .probe_models import CooldownWriteError, retry_after_seconds, save_cooldowns
 
     for up in cfg.upstreams:
         if up.models:
+            continue
+        if cooldowns.get(up.name, 0) > time.time():
+            log.info("[%s] skipping model discovery during probe cooldown", up.name)
             continue
         headers = {}
         if up.api_key:
@@ -111,18 +152,34 @@ async def discover_models(cfg) -> None:
         kwargs: dict = {"timeout": 20, "trust_env": False}
         if proxy:
             kwargs["proxy"] = proxy
-        try:
-            async with httpx.AsyncClient(**kwargs) as client:
-                resp = await client.get(f"{up.base_url}/models", headers=headers)
-                resp.raise_for_status()
-                payload = resp.json()
-                items = payload.get("data") if isinstance(payload, dict) else payload
-                up.discovered_models = [
-                    str(m.get("id")) for m in (items or []) if isinstance(m, dict) and m.get("id")
-                ]
-                log.info("[%s] discovered %d models", up.name, len(up.discovered_models))
-        except Exception as exc:
-            log.warning("[%s] model discovery failed: %s", up.name, exc)
+        # 启动时网络/代理可能尚未就绪；重试一次，避免空模型列表锁死整个进程。
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(**kwargs) as client:
+                    resp = await client.get(f"{up.base_url}/models", headers=headers)
+                    if resp.status_code == 429:
+                        cooldowns[up.name] = time.time() + max(1, retry_after_seconds(resp.headers.get("Retry-After")))
+                        try:
+                            save_cooldowns(cfg, cooldowns)
+                        except OSError as exc:
+                            raise CooldownWriteError("cannot persist startup discovery cooldown") from exc
+                        log.warning("[%s] model discovery rate limited", up.name)
+                        break
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    items = payload.get("data") if isinstance(payload, dict) else payload
+                    up.discovered_models = [
+                        str(m.get("id")) for m in (items or []) if isinstance(m, dict) and m.get("id")
+                    ]
+                    log.info("[%s] discovered %d models", up.name, len(up.discovered_models))
+                    break
+            except CooldownWriteError:
+                raise
+            except Exception as exc:
+                if attempt == 0:
+                    await asyncio.sleep(1)
+                    continue
+                log.warning("[%s] model discovery failed: %s", up.name, exc)
 
 
 @asynccontextmanager
@@ -182,6 +239,17 @@ async def lifespan(app: FastAPI):
     log.info("collectors: %s", ", ".join(c.name for c in collectors) or "(none)")
     if not cfg.client_keys:
         log.warning("没有配置任何客户端 key，所有请求都会被拒绝")
+    if not is_loopback_host(cfg.host):
+        disabled = []
+        if not cfg.stats_key:
+            disabled.append("statistics API")
+        if not cfg.admin_key:
+            disabled.append("management API")
+        if disabled:
+            log.warning(
+                "non-loopback bind without required keys; disabled until configured: %s",
+                ", ".join(disabled),
+            )
 
     try:
         yield
@@ -210,10 +278,89 @@ def _auth(request: Request):
     return ck, None
 
 
+async def _reject(request: Request, response: JSONResponse, kind: str, client_key: str | None = None):
+    request_id = uuid.uuid4().hex
+    response.headers["x-trace-id"] = request_id
+    try:
+        ts = int(time.time())
+        trace = Trace(request_id)
+        trace.add("reject", 0, kind=kind, status=response.status_code)
+        record = UsageRecord(ts=ts, source="gateway", client_key=client_key,
+                             status=response.status_code, raw={"request_id": request_id})
+        request.state.recording_attempted = True
+        await asyncio.to_thread(request.app.state.store.record_request,
+            usage_record=record, trace=trace.finish(), ts=ts, source="gateway",
+            client_key=client_key, status=response.status_code, result="rejected",
+            error_stage="entry", error_kind=kind, error_status=response.status_code,
+            session_key=getattr(request.state, "session_key", None),
+            session_source=getattr(request.state, "session_source", None))
+    except Exception:
+        # A rejected request must not become a 500 if bookkeeping fails.
+        log.error("Failed to record rejected request (trace_id=%s)", request_id)
+    return response
+
+
 async def _handle(request: Request, path: str):
+    try:
+        return await _handle_entry(request, path)
+    except Exception as exc:
+        # Forwarding and rejection may already have written a record, even if
+        # they subsequently fail. Never invent a second billable request.
+        if getattr(request.state, "recording_attempted", False):
+            request_id = uuid.uuid4().hex
+            log.error(
+                "Request failed after accounting was delegated; no fallback record written "
+                "(error_id=%s, context=%s)",
+                request_id,
+                _safe_exception_context(exc),
+            )
+            return JSONResponse({"error": {"message": "Internal server error", "type": "internal_error"}},
+                                status_code=500, headers={"x-trace-id": request_id})
+        request_id = uuid.uuid4().hex
+        ts = int(time.time())
+        log.error(
+            "Unexpected entry failure (trace_id=%s, context=%s)",
+            request_id,
+            _safe_exception_context(exc),
+        )
+        try:
+            trace = Trace(request_id)
+            trace.add("entry", 0, kind="unexpected_error", status=500)
+            record = UsageRecord(ts=ts, source="gateway", status=500,
+                                 raw={"request_id": request_id})
+            await asyncio.to_thread(
+                request.app.state.store.record_request,
+                usage_record=record, trace=trace.finish(), ts=ts, source="gateway",
+                status=500, result="internal_error", error_stage="entry",
+                error_kind="unexpected_error", error_status=500,
+                session_key=getattr(request.state, "session_key", None),
+                session_source=getattr(request.state, "session_source", None),
+            )
+        except Exception:
+            log.error("Failed to record unexpected entry failure (trace_id=%s)", request_id)
+        return JSONResponse({"error": {"message": "Internal server error", "type": "internal_error"}},
+                            status_code=500, headers={"x-trace-id": request_id})
+
+
+async def _handle_entry(request: Request, path: str):
     ck, err = _auth(request)
     if err:
-        return err
+        return await _reject(request, err, "authentication")
+
+    session_values = request.headers.getlist("x-session-id")
+    try:
+        if len(session_values) > 1:
+            raise ValueError("duplicate session header")
+        if session_values:
+            validate_session_id(session_values[0])
+            attributor = getattr(request.app.state, "session_attributor", None)
+            if attributor is None:
+                attributor = SessionAttributor(request.app.state.store.path.parent)
+                request.app.state.session_attributor = attributor
+            request.state.session_key = attributor.fingerprint(session_values[0], client_id=ck.name, source="header")
+            request.state.session_source = "header"
+    except ValueError:
+        return await _reject(request, JSONResponse({"error": {"message": "Invalid session header", "type": "invalid_request_error"}}, status_code=400), "invalid_session", ck.name)
 
     cfg = request.app.state.cfg
     store = request.app.state.store
@@ -225,52 +372,40 @@ async def _handle(request: Request, path: str):
         try:
             import json as _json
             payload = _json.loads(body)
-            raw_model = payload.get("model")
-        except Exception:
+            if isinstance(payload, dict):
+                raw_model = payload.get("model")
+        except (ValueError, TypeError):
             payload = None
-            raw_model = None
 
-    if not raw_model:
-        return JSONResponse(
+    if raw_model is None or raw_model == "":
+        return await _reject(request, JSONResponse(
             {"error": {"message": "Missing 'model' in request body", "type": "invalid_request_error"}},
             status_code=400,
-        )
+        ), "missing_model", ck.name)
+    if not isinstance(raw_model, str) or not raw_model.strip():
+        return await _reject(request, JSONResponse(
+            {"error": {"message": "'model' must be a non-empty string", "type": "invalid_request_error"}},
+            status_code=400,
+        ), "invalid_model", ck.name)
 
     # 解析前缀：axon/kimi-k3 -> (relay-axon, kimi-k3)
     upstream, model, route_error = cfg.route(raw_model)
 
     if upstream is None:
-        return JSONResponse(
+        return await _reject(request, JSONResponse(
             {"error": {"message": route_error, "type": "invalid_request_error"}},
             status_code=400 if "must be prefixed" in route_error else 404,
-        )
-
-    # 检查该模型是否被探测标记为不可用（仅限 404/410 这类确定不存在的模型）
-    if model in upstream.unavailable_models:
-        log.warning(
-            "[%s] rejected unavailable model '%s' (see model_health.json)",
-            upstream.name, model,
-        )
-        return JSONResponse(
-            {"error": {
-                "message": (
-                    f"Model '{model}' on upstream '{upstream.name}' was reported gone/not-found "
-                    f"by the model probe. Try another model or run: python -m app.probe_models"
-                ),
-                "type": "invalid_request_error",
-            }},
-            status_code=503,
-        )
+        ), "route", ck.name)
 
     # 模型白名单检查（支持前缀写法）
     if ck.allow_models:
         allowed = set(ck.allow_models)
         if raw_model not in allowed and model not in allowed:
-            return JSONResponse(
+            return await _reject(request, JSONResponse(
                 {"error": {"message": f"Model '{raw_model}' not allowed for key '{ck.name}'",
                            "type": "invalid_request_error"}},
                 status_code=403,
-            )
+            ), "model_not_allowed", ck.name)
 
     # 构造候选上游列表。
     #
@@ -285,9 +420,17 @@ async def _handle(request: Request, path: str):
     explicit_up = cfg.find_by_prefix(prefix) if sep else None
 
     if cfg.failover and explicit_up is not None:
+        def confirmed_missing(up):
+            checked = up._model_health_checked
+            if checked is None:
+                return model in up.unavailable_models
+            timestamp = checked.get(model)
+            return timestamp is not None and 0 <= time.time() - timestamp <= MODEL_HEALTH_TTL
+
         candidates = [
             up for up in cfg.upstreams
-            if up.prefix == explicit_up.prefix and model not in up.unavailable_models
+            if up.prefix == explicit_up.prefix
+            and (up is explicit_up or not confirmed_missing(up))
         ]
         candidates.sort(key=lambda u: u.priority)
         if not candidates:
@@ -300,14 +443,40 @@ async def _handle(request: Request, path: str):
 
     # model 改写与兼容层统一在 forward_with_failover 内一次序列化完成，
     # 避免对几百 KB 的多轮上下文重复 json.loads / json.dumps。
-    return await forward_with_failover(
-        request=request, cfg=cfg, store=store, tracker=tracker,
-        path=path, body=body, client_key_name=ck.name, model=model,
-        requested_model=raw_model, candidates=candidates,
-        allow_retry=cfg.failover,
-        max_rounds=max_rounds,
-        parsed_payload=payload if isinstance(payload, dict) else None,
-    )
+    # From this point the proxy owns accounting and may persist before raising.
+    request.state.recording_attempted = True
+    token = session_context.set((getattr(request.state, "session_key", None),
+                                 getattr(request.state, "session_source", None)))
+    try:
+        response = await forward_with_failover(
+            request=request, cfg=cfg, store=store, tracker=tracker,
+            path=path, body=body, client_key_name=ck.name, model=model,
+            requested_model=raw_model, candidates=candidates,
+            allow_retry=cfg.failover,
+            max_rounds=max_rounds,
+            parsed_payload=payload if isinstance(payload, dict) else None,
+        )
+        # StreamingResponse executes after this context is reset; carry the
+        # fingerprint explicitly into the stream generator instead.
+        if hasattr(response, "body_iterator"):
+            iterator = response.body_iterator
+            session = session_context.get()
+            async def attributed_stream():
+                stream_token = session_context.set(session)
+                try:
+                    async for chunk in iterator:
+                        yield chunk
+                finally:
+                    try:
+                        close = getattr(iterator, "aclose", None)
+                        if close is not None:
+                            await close()
+                    finally:
+                        session_context.reset(stream_token)
+            response.body_iterator = attributed_stream()
+        return response
+    finally:
+        session_context.reset(token)
 
 
 @app.post("/v1/chat/completions")
