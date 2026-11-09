@@ -2,8 +2,8 @@
 
 设计要点：
 
-1. **只判断「剩余百分比」**。百分比类窗口（订阅额度）和金额类窗口（余额）
-   都先折算成百分比，判断逻辑只有一套。
+1. **按已知数据判断**。百分比窗口使用百分比阈值；没有百分比的余额仅在
+   配置对应来源和币种的绝对金额阈值后判断，不虚构百分比。
 2. **状态机 + 冷却**。每个 (source, account, window) 维护一条记录：
    当前等级、上次提醒时间、上次提醒时的等级。只有「等级变差」或
    「冷却到期后仍然超标」才提醒，避免每分钟刷屏。
@@ -18,6 +18,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import logging
+import math
 import time
 import urllib.request
 from dataclasses import dataclass, field
@@ -47,12 +48,12 @@ def source_label(source: str) -> str:
 
 @dataclass
 class QuotaItem:
-    """一条额度快照（已折算成百分比）。"""
+    """一条额度快照；金额型额度的百分比可以未知。"""
 
     source: str
     account: str
     window: str
-    remaining_pct: float
+    remaining_pct: float | None
     remaining_amt: float | None = None
     currency: str | None = None
     resets_at: int | None = None
@@ -67,10 +68,20 @@ class QuotaItem:
     hours_to_reset: float | None = None     # 距离窗口重置还有多少小时
     projected_pct: float | None = None      # 按当前速率到重置时预计还剩多少
     exhaust_before_reset: bool = False      # 会不会在重置前耗尽
+    sample_span_hours: float | None = None
+    sample_count: int | None = None
+    prediction_note: str | None = None
 
     @property
     def key(self) -> tuple[str, str, str]:
         return (self.source, self.account, self.window)
+
+    @property
+    def state_key(self) -> tuple[str, str, str, str, str]:
+        # 金额与百分比、不同币种的状态不能互相触发恢复或共享冷却。
+        mode = "pct" if self.remaining_pct is not None else "amount"
+        currency = (self.currency or "").strip().upper() if mode == "amount" else ""
+        return (*self.key, mode, currency)
 
     @property
     def label(self) -> str:
@@ -81,7 +92,7 @@ class QuotaItem:
             "source": self.source,
             "account": self.account,
             "window": self.window,
-            "remaining_pct": round(self.remaining_pct, 2),
+            "remaining_pct": round(self.remaining_pct, 2) if self.remaining_pct is not None else None,
             "remaining_amt": self.remaining_amt,
             "currency": self.currency,
             "resets_at": self.resets_at,
@@ -95,6 +106,9 @@ class QuotaItem:
             "hours_to_reset": self.hours_to_reset,
             "projected_pct": self.projected_pct,
             "exhaust_before_reset": self.exhaust_before_reset,
+            "sample_span_hours": self.sample_span_hours,
+            "sample_count": self.sample_count,
+            "prediction_note": self.prediction_note,
         }
 
 
@@ -128,6 +142,48 @@ def classify(pct: float, cfg: QuotaAlertConfig) -> int:
     return LEVEL_OK
 
 
+def _amount_limits(item: QuotaItem, cfg: QuotaAlertConfig) -> dict[str, float] | None:
+    # Relay's historical spend is stored in remaining_amt for display, not a balance.
+    if item.source.startswith("relay:") and item.window == "all_time_spend":
+        return None
+    if not item.currency or item.remaining_amt is None:
+        return None
+    if not math.isfinite(item.remaining_amt):
+        return None
+    return cfg.amount_thresholds.get(item.source, {}).get(item.currency.strip().upper())
+
+
+def item_level_name(item: QuotaItem, cfg: QuotaAlertConfig) -> str:
+    """Return the public level, including data that cannot be classified."""
+    if (item.stale or (item.source.startswith("relay:") and item.window == "all_time_spend")
+            or (item.remaining_pct is None and _amount_limits(item, cfg) is None)
+            or (item.remaining_pct is not None and not math.isfinite(item.remaining_pct))):
+        return "unknown"
+    return LEVEL_NAMES[classify_item(item, cfg)]
+
+
+def classify_item(item: QuotaItem, cfg: QuotaAlertConfig) -> int:
+    """告警判断和状态视图共用同一套阈值及预测规则。"""
+    if item.stale or (item.source.startswith("relay:") and item.window == "all_time_spend"):
+        return LEVEL_OK
+    if item.remaining_pct is None:
+        limits = _amount_limits(item, cfg)
+        if limits is None:
+            return LEVEL_OK
+        if "critical" in limits and item.remaining_amt <= limits["critical"]:
+            return LEVEL_CRITICAL
+        if "warn" in limits and item.remaining_amt <= limits["warn"]:
+            return LEVEL_WARN
+        return LEVEL_OK
+    level = classify(item.remaining_pct, cfg)
+    if level == LEVEL_OK and item.remaining_pct <= 90:
+        if item.exhaust_before_reset and item.hours_left is not None and item.hours_left <= 48:
+            return LEVEL_WARN
+        if item.resets_at is None and item.days_left is not None and item.days_left <= 3:
+            return LEVEL_WARN
+    return level
+
+
 def is_ignored(source: str, account: str, window: str, cfg: QuotaAlertConfig) -> bool:
     """ignore_windows 支持通配符，可匹配 window、account 或 "source:window"。"""
     candidates = (window, account, f"{source}:{window}")
@@ -159,22 +215,23 @@ def _fmt_amount(item: QuotaItem) -> str:
 
 
 def build_message(kind: str, item: QuotaItem) -> str:
-    pct = f"{item.remaining_pct:.1f}%"
+    value = (f"{item.remaining_pct:.1f}%" if item.remaining_pct is not None
+             else f"{item.currency} {item.remaining_amt:.2f}")
     if kind == "recovered":
-        head = f"✅ 额度已恢复：{item.label} 剩 {pct}"
+        head = f"✅ 额度已恢复：{item.label} 剩 {value}"
     elif kind == "critical":
-        head = f"🔴 额度告急：{item.label} 只剩 {pct}"
+        head = f"🔴 额度告急：{item.label} 只剩 {value}"
     else:
-        head = f"🟠 额度偏低：{item.label} 剩 {pct}"
-    tail = " ".join(x for x in (_fmt_amount(item), _fmt_reset(item.resets_at)) if x)
+        head = f"🟠 额度偏低：{item.label} 剩 {value}"
+    tail = " ".join(x for x in (_fmt_amount(item) if item.remaining_pct is not None else "", _fmt_reset(item.resets_at)) if x)
     if item.exhaust_before_reset and item.hours_left is not None:
         # 只报「重置前真的会用完」的预测；百分比/天数在没有重置时间时才有意义
         if item.hours_left >= 48:
             tail += f" · 按当前速率约 {item.hours_left / 24:.1f} 天耗尽"
         else:
             tail += f" · 按当前速率约 {item.hours_left:.0f} 小时耗尽"
-    elif item.hours_to_reset is None and item.days_left is not None and item.days_left <= 30:
-        tail += f" · 按当前速率约 {item.days_left:.1f} 天耗尽"
+    elif item.resets_at is None and item.days_left is not None and item.days_left <= 30:
+        tail += f" · 无重置时间，线性估算约 {item.days_left:.1f} 天耗尽"
     return f"{head} {tail}".strip()
 
 
@@ -183,7 +240,7 @@ class QuotaAlerter:
 
     def __init__(self, cfg: QuotaAlertConfig):
         self.cfg = cfg
-        self.states: dict[tuple[str, str, str], AlertState] = {}
+        self.states: dict[tuple[str, str, str, str, str], AlertState] = {}
         self.history: list[dict[str, Any]] = []
         self.notifier = Notifier(cfg.notify)
 
@@ -195,30 +252,16 @@ class QuotaAlerter:
         events: list[AlertEvent] = []
 
         for item in items:
-            if item.stale or is_ignored(item.source, item.account, item.window, self.cfg):
+            if (is_ignored(item.source, item.account, item.window, self.cfg)
+                    or item_level_name(item, self.cfg) == "unknown"):
                 continue
 
-            level = classify(item.remaining_pct, self.cfg)
-            # 燃烧率预警：还没到告警阈值，但按当前速率会在重置前耗尽（48h 内）
-            # → 提前预警。有重置时间时不再用「天数」判断，避免 5h 窗口误报。
-            if level == LEVEL_OK and item.remaining_pct <= 90:
-                if (
-                    item.exhaust_before_reset
-                    and item.hours_left is not None
-                    and item.hours_left <= 48
-                ):
-                    level = LEVEL_WARN
-                elif (
-                    item.hours_to_reset is None
-                    and item.days_left is not None
-                    and item.days_left <= 3
-                ):
-                    level = LEVEL_WARN
+            level = classify_item(item, self.cfg)
             item.level = level
-            state = self.states.get(item.key)
+            state = self.states.get(item.state_key)
             if state is None:
                 state = AlertState(level=level, last_value=item.remaining_pct)
-                self.states[item.key] = state
+                self.states[item.state_key] = state
                 # 首次见到就超标也要提醒
                 if level > LEVEL_OK:
                     events.append(self._fire(item, state, level, now))
@@ -271,7 +314,10 @@ class QuotaAlerter:
             "source": event.item.source,
             "account": event.item.account,
             "window": event.item.window,
-            "remaining_pct": round(event.item.remaining_pct, 2),
+            "remaining_pct": (round(event.item.remaining_pct, 2)
+                              if event.item.remaining_pct is not None else None),
+            "remaining_amt": event.item.remaining_amt,
+            "currency": event.item.currency,
             "message": event.message,
         })
         # 只留最近 200 条
@@ -291,19 +337,21 @@ class QuotaAlerter:
         for item in items:
             if is_ignored(item.source, item.account, item.window, self.cfg):
                 continue
-            state = self.states.get(item.key)
-            item.level = classify(item.remaining_pct, self.cfg) if not item.stale else LEVEL_OK
+            state = self.states.get(item.state_key)
+            row = item.to_dict()
+            row["level"] = item_level_name(item, self.cfg)
             rows.append({
-                **item.to_dict(),
+                **row,
                 "last_notified_at": int(state.last_notified_at) if state else 0,
                 "last_message": state.last_message if state else "",
             })
-        rows.sort(key=lambda r: (r["level"] != "critical", r["level"] != "warn", r["remaining_pct"]))
+        rows.sort(key=lambda r: (r["level"] != "critical", r["level"] != "warn", r["remaining_pct"] if r["remaining_pct"] is not None else float("inf")))
         return {
             "config": {
                 "enabled": self.cfg.enabled,
                 "warn_pct": self.cfg.warn_pct,
                 "critical_pct": self.cfg.critical_pct,
+                "amount_thresholds": self.cfg.amount_thresholds,
                 "cooldown_sec": self.cfg.cooldown_sec,
                 "ignore_windows": self.cfg.ignore_windows,
                 "channels": self.notifier.active_channels(),
@@ -313,6 +361,7 @@ class QuotaAlerter:
                 "critical": sum(1 for r in rows if r["level"] == "critical"),
                 "warn": sum(1 for r in rows if r["level"] == "warn"),
                 "ok": sum(1 for r in rows if r["level"] == "ok"),
+                "unknown": sum(1 for r in rows if r["level"] == "unknown"),
             },
             "history": list(reversed(self.history[-50:])),
         }

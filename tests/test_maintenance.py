@@ -16,12 +16,12 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.api import stats as stats_api  # noqa: E402
-from app.alerts import QuotaAlerter, QuotaItem  # noqa: E402
+from app.alerts import QuotaAlerter, QuotaItem, classify_item, LEVEL_WARN, LEVEL_OK, LEVEL_CRITICAL  # noqa: E402
 from app.collectors.vibe import VibeCollector  # noqa: E402
-from app.config import QuotaAlertConfig, apply_model_health  # noqa: E402
+from app.config import QuotaAlertConfig, apply_model_health, _load_alerts  # noqa: E402
 from app.db import Store  # noqa: E402
 from app.models import QuotaSnapshot, UsageRecord  # noqa: E402
-from app.scheduler import load_quota_items  # noqa: E402
+from app.scheduler import compute_burn, load_quota_items  # noqa: E402
 
 
 class PruneUsageTest(unittest.TestCase):
@@ -144,8 +144,8 @@ class ModelHealthTest(unittest.TestCase):
         up = SimpleNamespace(name="mistral", unavailable_models=set())
         health = {"mistral": {
             "ok-model": {"status": "ok"},
-            "gone-model": {"status": "gone", "code": 410},
-            "missing-model": {"status": "not_found", "code": 404},
+            "gone-model": {"status": "gone", "code": 410, "missing_count": 2, "checked_at": time.time()},
+            "missing-model": {"status": "not_found", "code": 404, "missing_count": 2, "checked_at": time.time()},
             "rate-limited-model": {"status": "rate_limited", "code": 429},
             "slow-model": {"status": "timeout"},
             "flaky-model": {"status": "server_error", "code": 503},
@@ -156,6 +156,22 @@ class ModelHealthTest(unittest.TestCase):
 
 
 class BurnRateTest(unittest.TestCase):
+    def test_latest_quota_normalizes_empty_group_and_breaks_timestamp_ties(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "usage.db")
+            now = int(time.time())
+            store.insert_quota([
+                QuotaSnapshot(ts=now, source="s", account=None, window=None, remaining_pct=80),
+                QuotaSnapshot(ts=now, source="s", account="", window="", remaining_pct=70),
+                QuotaSnapshot(ts=now - 1, source="s", account="", window="", remaining_pct=60),
+                QuotaSnapshot(ts=now, source="s", account="other", window="", remaining_pct=50),
+            ])
+            items = load_quota_items(store, stale_sec=10800)
+            self.assertEqual(len(items), 2)
+            self.assertEqual({item.account: item.remaining_pct for item in items},
+                             {"—": 70, "other": 50})
+            store.close()
+
     def test_burn_prediction(self):
         tmp = Path(tempfile.mkdtemp(prefix="ugburn-"))
         store = Store(tmp / "usage.db")
@@ -227,6 +243,134 @@ class BurnRateTest(unittest.TestCase):
         self.assertIsNone(it.days_left)
         store.close()
 
+    def test_reset_change_and_recharge_cut_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "usage.db")
+            now = int(time.time())
+            for h, pct, reset in ((8, 90, now + 1000), (6, 80, now + 2000),
+                                  (4, 70, now + 2000), (2, 75, now + 2000),
+                                  (0, 65, now + 2000)):
+                store.insert_quota([QuotaSnapshot(ts=now-h*3600, source="s", account="a",
+                                                   window="5h", remaining_pct=pct, resets_at=reset)])
+            item = load_quota_items(store, 10800)[0]
+            self.assertEqual(item.sample_count, 2)
+            self.assertEqual(item.sample_span_hours, 2)
+            self.assertAlmostEqual(item.burn_per_hour, 5)
+            store.close()
+
+    def test_reset_change_discards_pre_reset_samples(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "usage.db")
+            now = int(time.time())
+            for h, pct, reset in ((8, 90, now + 100), (4, 70, now + 100),
+                                  (0, 60, now + 10000)):
+                store.insert_quota([QuotaSnapshot(ts=now-h*3600, source="s", window="weekly",
+                                                   remaining_pct=pct, resets_at=reset)])
+            self.assertIsNone(load_quota_items(store, 10800)[0].burn_per_hour)
+            store.close()
+
+    def test_reset_known_only_at_later_sample_boundaries(self):
+        now = 1_700_000_000
+        first = now - 2 * 3600
+        for reset, predicts in ((first - 1, True), (first, True),
+                                (first + 1, False), (now, False), (now + 1, True),
+                                (None, True)):
+            with self.subTest(reset=reset), tempfile.TemporaryDirectory() as tmp:
+                store = Store(Path(tmp) / "usage.db")
+                try:
+                    for ts, pct, sample_reset in ((first, 90, None), (now, 70, reset)):
+                        store.insert_quota([QuotaSnapshot(ts=ts, source="s", window="5h",
+                                                           remaining_pct=pct, resets_at=sample_reset)])
+                    burn = compute_burn(store.read_conn(), now=now)
+                    if predicts:
+                        self.assertEqual(burn[("s", "", "5h")]["sample_count"], 2)
+                        self.assertEqual(burn[("s", "", "5h")]["per_hour"], 10)
+                    else:
+                        self.assertEqual(burn, {})
+                finally:
+                    store.close()
+
+    def test_burn_resumes_with_enough_post_reset_samples(self):
+        now = 1_700_000_000
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "usage.db")
+            try:
+                reset = now - 3 * 3600
+                for h, pct, sample_reset in ((4, 90, None), (2, 80, reset), (0, 70, reset)):
+                    store.insert_quota([QuotaSnapshot(ts=now-h*3600, source="s", window="5h",
+                                                       remaining_pct=pct, resets_at=sample_reset)])
+                result = compute_burn(store.read_conn(), now=now)[("s", "", "5h")]
+                self.assertEqual(result["sample_count"], 2)
+                self.assertEqual(result["sample_span_hours"], 2)
+                self.assertEqual(result["per_hour"], 5)
+            finally:
+                store.close()
+
+    def test_known_reset_survives_missing_values_without_guessing_cycles(self):
+        now = 1_700_000_000
+        cases = (
+            # 已知重置穿过多个缺失值；只剩一个重置后样本。
+            (((0, 90, 3), (2, 80, None), (4, 70, None)), None),
+            # 重置后的足够样本可恢复预测，且不猜测周期性重置。
+            (((0, 90, 3), (2, 80, None), (4, 70, None), (6, 60, None),
+              (10, 40, None)), (3, 6, 5)),
+            # 缺失数据不推测重置，即使样本时间跨度超过窗口长度。
+            (((0, 90, None), (2, 80, None), (8, 50, None)), (3, 8, 5)),
+            # 新的已知时间与旧值不同，即使中间缺失也切段。
+            (((0, 90, 9), (2, 80, None), (4, 70, 10)), None),
+            # 在重置时刻恰好采样时切段，随后不重复切段。
+            (((0, 90, 3), (2, 80, None), (3, 70, None), (5, 60, None)), (2, 2, 5)),
+        )
+        for samples, expected in cases:
+            with self.subTest(samples=samples), tempfile.TemporaryDirectory() as tmp:
+                store = Store(Path(tmp) / "usage.db")
+                try:
+                    base = now - samples[-1][0] * 3600
+                    for hour, pct, reset in samples:
+                        store.insert_quota([QuotaSnapshot(
+                            ts=base + hour * 3600, source="s", window="5h", remaining_pct=pct,
+                            resets_at=None if reset is None else base + reset * 3600)])
+                    burn = compute_burn(store.read_conn(), now=now)
+                    if expected is None:
+                        self.assertEqual(burn, {})
+                    else:
+                        result = burn[("s", "", "5h")]
+                        self.assertEqual((result["sample_count"], result["sample_span_hours"],
+                                          result["per_hour"]), expected)
+                finally:
+                    store.close()
+
+    def test_stale_insufficient_and_amount_only_do_not_predict(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "usage.db")
+            now = int(time.time())
+            for source, h, pct, amt in (("stale", 8, 80, None), ("stale", 4, 60, None),
+                                         ("short", 0.5, 80, None), ("short", 0, 70, None),
+                                         ("balance", 7, None, 100), ("balance", 0, None, 20)):
+                store.insert_quota([QuotaSnapshot(ts=int(now-h*3600), source=source, window="5h",
+                                                   remaining_pct=pct, remaining_amt=amt)])
+            items = {x.source: x for x in load_quota_items(store, 3600)}
+            self.assertTrue(items["stale"].stale)
+            self.assertIsNone(items["stale"].burn_per_hour)
+            self.assertIsNone(items["short"].burn_per_hour)
+            self.assertIsNone(items["balance"].remaining_pct)
+            self.assertEqual(items["balance"].remaining_amt, 20)
+            self.assertIsNone(items["balance"].burn_per_hour)
+            store.close()
+
+    def test_prediction_view_and_notification_agree(self):
+        cfg = QuotaAlertConfig(enabled=True, warn_pct=20, critical_pct=10)
+        alerter = QuotaAlerter(cfg)
+        item = QuotaItem(source="s", account="a", window="w", remaining_pct=60, days_left=2)
+        self.assertEqual(classify_item(item, cfg), LEVEL_WARN)
+        self.assertEqual(alerter.snapshot([item])["items"][0]["level"], "warn")
+        self.assertEqual(alerter.evaluate([item], now=100)[0].kind, "warn")
+        item.resets_at = 1  # 已过的重置时间不是「没有重置时间」
+        self.assertEqual(classify_item(item, cfg), LEVEL_OK)
+        item.stale = True
+        self.assertEqual(alerter.evaluate([item], now=200), [])
+        self.assertEqual(alerter.snapshot([item])["items"][0]["level"], "unknown")
+
     def test_burn_warn_before_threshold(self):
         """还没到告警阈值，但按速率 3 天内耗尽 → 提前预警。"""
         cfg = QuotaAlertConfig(enabled=True, warn_pct=20, critical_pct=10)
@@ -242,6 +386,72 @@ class BurnRateTest(unittest.TestCase):
         self.assertIn("天耗尽", events[0].message)
         # 冷却期内不重复提醒
         self.assertEqual(alerter.evaluate([item]), [])
+
+
+class AmountAlertTest(unittest.TestCase):
+    def item(self, amount=10, source="relay", currency="USD", **kwargs):
+        return QuotaItem(source=source, account="a", window="balance", remaining_pct=None,
+                         remaining_amt=amount, currency=currency, **kwargs)
+
+    def test_config_validation_and_default_disabled(self):
+        item = self.item(0)
+        self.assertEqual(QuotaAlerter(QuotaAlertConfig()).evaluate([item]), [])
+        cfg = _load_alerts({"alerts": {"amount_thresholds": {
+            "relay": {"usd": {"warn": 10, "critical": 2}}}}})
+        self.assertEqual(cfg.amount_thresholds["relay"]["USD"]["warn"], 10)
+        for limits in ({"warn": 1, "critical": 2}, {"warn": -1},
+                       {"warn": float("nan")}, {"warn": True}, {"typo": 3}):
+            with self.subTest(limits=limits), self.assertRaises(ValueError):
+                _load_alerts({"alerts": {"amount_thresholds": {"relay": {"USD": limits}}}})
+
+    def test_boundaries_isolation_and_percentage_priority(self):
+        cfg = QuotaAlertConfig(amount_thresholds={"relay": {"USD": {"warn": 10, "critical": 2}}})
+        self.assertEqual(classify_item(self.item(10), cfg), LEVEL_WARN)
+        self.assertEqual(classify_item(self.item(2), cfg), LEVEL_CRITICAL)
+        self.assertEqual(classify_item(self.item(10.01), cfg), LEVEL_OK)
+        for item in (self.item(0, source="other"), self.item(0, currency="EUR"),
+                     self.item(0, currency=None), self.item(float("nan")), self.item(0, stale=True)):
+            self.assertEqual(classify_item(item, cfg), LEVEL_OK)
+        item = self.item(0)
+        item.remaining_pct = 90
+        self.assertEqual(classify_item(item, cfg), LEVEL_OK)
+
+    def test_amount_alert_cooldown_recovery_and_history(self):
+        cfg = QuotaAlertConfig(cooldown_sec=100, amount_thresholds={
+            "relay": {"USD": {"warn": 10, "critical": 2}, "EUR": {"warn": 10}}})
+        alerter = QuotaAlerter(cfg)
+        item = self.item(10, currency="usd")
+        event = alerter.evaluate([item], now=100)[0]
+        self.assertEqual(event.kind, "warn")
+        self.assertIn("usd 10.00", event.message)
+        self.assertNotIn("%", event.message)
+        self.assertIsNone(alerter.history[-1]["remaining_pct"])
+        self.assertEqual(alerter.snapshot([item])["items"][0]["level"], "warn")
+        self.assertEqual(alerter.evaluate([item], now=150), [])
+        self.assertEqual(alerter.evaluate([item], now=200)[0].kind, "warn")
+        item.remaining_amt = 2
+        self.assertEqual(alerter.evaluate([item], now=201)[0].kind, "critical")
+        item.remaining_amt = 11
+        self.assertEqual(alerter.evaluate([item], now=202)[0].kind, "recovered")
+        item.remaining_amt = 1
+        self.assertEqual(alerter.evaluate([item], now=203)[0].kind, "critical")
+        eur = self.item(1, currency="EUR")
+        self.assertEqual(alerter.evaluate([eur], now=204)[0].kind, "warn")
+        eur.remaining_amt = 20
+        self.assertEqual(alerter.evaluate([eur], now=205)[0].kind, "recovered")
+        self.assertEqual(alerter.evaluate([item], now=206), [])
+
+    def test_database_amount_keeps_unknown_percentage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / "usage.db")
+            store.insert_quota([QuotaSnapshot(ts=int(time.time()), source="relay", window="balance",
+                                               remaining_amt=1, currency="USD")])
+            item = load_quota_items(store, 3600)[0]
+            alerter = QuotaAlerter(QuotaAlertConfig(amount_thresholds={"relay": {"USD": {"warn": 5}}}))
+            self.assertEqual(alerter.evaluate([item])[0].kind, "warn")
+            self.assertIsNone(item.to_dict()["remaining_pct"])
+            self.assertIsNone(item.burn_per_hour)
+            store.close()
 
 
 if __name__ == "__main__":

@@ -174,7 +174,8 @@ def _multiplier_factor(multipliers: list[dict], at: datetime | None) -> float:
         if not _match_when(when, day, hhmm, today):
             continue
         try:
-            return float(rule.get("factor") or 1.0)
+            factor = rule.get("factor")
+            return float(1.0 if factor is None else factor)
         except (TypeError, ValueError):
             continue
     return 1.0

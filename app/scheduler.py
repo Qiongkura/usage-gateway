@@ -13,7 +13,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from .alerts import QuotaAlerter, QuotaItem
 from .collectors.base import Collector
-from .db import Store
+from .collectors.vibe import VibeCollector
+from .db import CollectorStateConflict, Store
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +42,8 @@ class Scheduler:
         # 配置引用：自动探测模型后热应用可用性
         self.cfg = cfg
         # 模型可用性自动探测间隔（天，0 = 关闭）
-        self.probe_days = max(0, int(probe_days or 0))
+        self.probe_days = max(0, int(getattr(cfg, "probe_days", probe_days) or 0))
+        self._probe_lock = threading.Lock()
         self.sched = BackgroundScheduler(timezone="Asia/Shanghai")
 
     def start(self) -> None:
@@ -52,6 +54,10 @@ class Scheduler:
             next_run_time=datetime.now(),
         )
         self.sched.start()
+
+    @property
+    def running(self) -> bool:
+        return bool(self.sched.running)
 
     def shutdown(self) -> None:
         try:
@@ -114,29 +120,73 @@ class Scheduler:
                 log.exception("database backup failed")
 
             # 每周自动探测模型可用性，结果热应用到运行中的网关（无需重启）
-            if self.probe_days > 0 and now - getattr(self, "_last_probe", 0) > self.probe_days * 86400:
-                self._last_probe = now
-                threading.Thread(target=self._weekly_probe, daemon=True, name="probe").start()
+            if self.probe_days > 0 and self._probe_lock.acquire(blocking=False):
+                try:
+                    last = self.store.watermark("__model_probe__")
+                    last_failure = self.store.watermark("__model_probe_failure__")
+                    if now - last >= self.probe_days * 86400 and now - last_failure >= 300:
+                        threading.Thread(target=self._weekly_probe, daemon=True, name="probe").start()
+                    else:
+                        self._probe_lock.release()
+                except Exception:
+                    self._probe_lock.release()
+                    log.exception("probe scheduling failed")
 
     def _weekly_probe(self) -> None:
         try:
-            from .probe_models import main as probe_main
-            from .config import apply_model_health, load_model_health
+            from .probe_models import main as probe_main, probe_lock
+            from .config import apply_model_health, load_config, load_model_health
 
-            log.info("[probe] weekly model availability probe started")
-            probe_main()
-            health_file = Path(__file__).resolve().parent.parent / "model_health.json"
-            if self.cfg is not None and health_file.exists():
-                apply_model_health(self.cfg.upstreams, load_model_health(health_file))
-                hidden = sum(len(u.unavailable_models) for u in self.cfg.upstreams)
-                log.info("[probe] done, results applied (%d models hidden)", hidden)
+            cfg = self.cfg if self.cfg is not None else load_config()
+            with probe_lock(cfg) as acquired:
+                if not acquired:
+                    return
+                now = time.time()
+                if (now - self.store.watermark("__model_probe__") < self.probe_days * 86400
+                        or now - self.store.watermark("__model_probe_failure__") < 300):
+                    return
+                log.info("[probe] weekly model availability probe started")
+                try:
+                    result = probe_main(locked=True, cfg=cfg)
+                    health_file = Path(__file__).resolve().parent.parent / "model_health.json"
+                    if self.cfg is not None and health_file.exists():
+                        apply_model_health(self.cfg.upstreams, load_model_health(health_file))
+                    if result != 0:
+                        raise RuntimeError("probe incomplete")
+                    self.store.set_watermark("__model_probe__", int(time.time()))
+                except Exception:
+                    self.store.set_watermark("__model_probe_failure__", int(time.time()))
+                    log.exception("weekly probe failed")
         except Exception:
-            log.exception("weekly probe failed")
+            log.exception("weekly probe scheduling failed")
+        finally:
+            self._probe_lock.release()
 
     def _run_usage(self, c: Collector) -> None:
-        since = self.store.watermark(c.name)
-        records = list(c.collect_usage(since))
+        if isinstance(c, VibeCollector):
+            for attempt in range(3):
+                try:
+                    self._run_usage_batch(c)
+                    return
+                except CollectorStateConflict:
+                    if attempt == 2:
+                        raise
+            return
+        self._run_usage_batch(c)
+
+    def _run_usage_batch(self, c: Collector) -> None:
+        if isinstance(c, VibeCollector):
+            since, old_cursor = self.store.collector_position(c.name)
+            records, cursor = c.prepare_usage(since, old_cursor)
+        else:
+            since = self.store.watermark(c.name)
+            records = list(c.collect_usage(since))
         if not records:
+            if isinstance(c, VibeCollector) and cursor != old_cursor:
+                self.store.insert_usage(
+                    [], collector_state=(c.name, since, cursor),
+                    expected_collector_state=(since, old_cursor),
+                )
             return
         # 采集器记录（本地客户端日志）没有成本，按价格表（官方价）补算；
         # 与网关路径的 record_from_usage 同一套口径
@@ -149,8 +199,14 @@ class Scheduler:
                         cache_read=r.cache_read, cache_write=r.cache_write,
                         at=datetime.fromtimestamp(r.ts, tz=timezone.utc),
                     )
-        inserted = self.store.insert_usage(records)
-        self.store.set_watermark(c.name, max(r.ts for r in records))
+        if isinstance(c, VibeCollector):
+            inserted = self.store.insert_usage(
+                records, collector_state=(c.name, max(r.ts for r in records), cursor),
+                expected_collector_state=(since, old_cursor),
+            )
+        else:
+            inserted = self.store.insert_usage(records)
+            self.store.set_watermark(c.name, max(r.ts for r in records))
         if inserted:
             log.info("[%s] ingested %d new usage records", c.name, inserted)
 
@@ -188,53 +244,68 @@ def _window_span_hours(window: str) -> float | None:
     return None
 
 
-def compute_burn(conn, hours: int = 48, min_span_hours: float = 6.0) -> dict[tuple[str, str, str], dict]:
-    """按最近 N 小时快照计算每个池子的燃烧率。
-
-    返回 {(source, account, window): {"per_hour", "per_day", "hours_left", "days_left"}}，
-    单位是「百分点/小时」。短周期窗口（如 5h）允许更短的样本跨度，否则它永远等不到 6 小时。
-    数据不足（样本 < 2 或跨度不够）、未在消耗、或刚重置过的窗口不返回。
-    """
-    since = int(time.time()) - hours * 3600
+def compute_burn(conn, hours: int = 48, min_span_hours: float = 6.0,
+                 stale_sec: int = 10800, now: int | None = None) -> dict[tuple[str, str, str], dict]:
+    """按窗口独立估算线性消耗；样本不足、过期或跨重置时不外推。"""
+    now = int(time.time()) if now is None else now
     rows = conn.execute(
         "SELECT source, COALESCE(account,'') AS a, COALESCE(window,'') AS w, "
-        "ts, remaining_pct FROM quota_snapshots "
-        "WHERE ts > ? AND remaining_pct IS NOT NULL ORDER BY ts",
-        (since,),
+        "ts, remaining_pct, resets_at FROM quota_snapshots "
+        "WHERE ts > ? AND ts <= ? ORDER BY ts, id",
+        (now - hours * 3600, now),
     ).fetchall()
-
-    series: dict[tuple[str, str, str], list[tuple[int, float]]] = {}
-    for r in rows:
-        series.setdefault((r["source"], r["a"], r["w"]), []).append(
-            (int(r["ts"]), float(r["remaining_pct"]))
-        )
+    series: dict[tuple[str, str, str], list] = {}
+    for row in rows:
+        series.setdefault((row["source"], row["a"], row["w"]), []).append(row)
 
     out: dict[tuple[str, str, str], dict] = {}
-    for k, pts in series.items():
-        # 重置检测：百分比上跳超过 5 个点视为窗口重置，只取重置后的段
-        start = 0
-        for i in range(1, len(pts)):
-            if pts[i][1] - pts[i - 1][1] > 5:
-                start = i
-        seg = pts[start:]
-        if len(seg) < 2:
+    for key, pts in series.items():
+        # 最新快照必须有真实百分比，不能沿用早于金额快照的旧百分比。
+        if pts[-1]["remaining_pct"] is None or now - pts[-1]["ts"] > stale_sec:
             continue
-        span_h = (seg[-1][0] - seg[0][0]) / 3600
-        # 5h 这类短窗口整个周期都不到 6 小时，按周期放宽样本跨度
-        period_h = _window_span_hours(k[2])
+        start = 0
+        known_reset = pts[0]["resets_at"]
+        if known_reset is not None and known_reset <= pts[0]["ts"]:
+            known_reset = None
+        for i in range(1, len(pts)):
+            prev, cur = pts[i - 1], pts[i]
+            # 重置时间变化、跨过已知重置时刻或明显回升都切断历史。
+            # 回升可能是充值而非重置，但都不应混入同一消耗段。
+            if (prev["remaining_pct"] is None or cur["remaining_pct"] is None
+                    or (known_reset is not None and cur["resets_at"] is not None
+                        and known_reset != cur["resets_at"])
+                    or (prev["resets_at"] is not None and cur["resets_at"] is not None
+                        and prev["resets_at"] != cur["resets_at"])
+                    or any(reset is not None and prev["ts"] < reset <= cur["ts"]
+                           for reset in (known_reset, prev["resets_at"], cur["resets_at"]))
+                    or (prev["remaining_pct"] is not None and cur["remaining_pct"] is not None
+                        and cur["remaining_pct"] - prev["remaining_pct"] > 0.2)):
+                start = i
+            # 缺失值不覆盖此前已知的未来重置，也不推测下一个周期。
+            if cur["resets_at"] is not None:
+                known_reset = cur["resets_at"]
+            if known_reset is not None and known_reset <= cur["ts"]:
+                known_reset = None
+        seg = pts[start:]
+        if len(seg) < 2 or seg[0]["remaining_pct"] is None:
+            continue
+        span_h = (seg[-1]["ts"] - seg[0]["ts"]) / 3600
+        period_h = _window_span_hours(key[2])
         span_floor = 1.0 if period_h is not None and period_h <= 24 else min_span_hours
         if span_h < span_floor:
             continue
-        drop = seg[0][1] - seg[-1][1]
-        if drop <= 0.2:
+        drop = seg[0]["remaining_pct"] - seg[-1]["remaining_pct"]
+        if drop <= 0.2 or not 0 <= seg[-1]["remaining_pct"] <= 100:
             continue
-        per_hour = drop / span_h
-        hours_left = seg[-1][1] / per_hour
-        out[k] = {
-            "per_hour": round(per_hour, 4),
-            "per_day": round(per_hour * 24, 3),
-            "hours_left": round(min(hours_left, 365.0 * 24), 1),
-            "days_left": round(min(hours_left / 24, 365.0), 1),
+        rate = drop / span_h
+        left = seg[-1]["remaining_pct"] / rate
+        out[key] = {
+            "per_hour": rate,
+            "per_day": round(rate * 24, 3),
+            "hours_left": round(min(left, 365.0 * 24), 1),
+            "days_left": round(min(left / 24, 365.0), 1),
+            "sample_span_hours": round(span_h, 2),
+            "sample_count": len(seg),
         }
     return out
 
@@ -243,8 +314,7 @@ def load_quota_items(store: Store, stale_sec: int) -> list[QuotaItem]:
     """把最新快照折算成统一的百分比视图。
 
     - 有 remaining_pct 的（订阅额度）直接用
-    - 只有 remaining_amt 的（余额）用「剩余 / 初始」折算；
-      没有初始值时按同窗口历史最大值当初始值
+    - 只有 remaining_amt 的（余额）保留金额，不将历史最大值冒充额度上限
     - 超过 stale_sec 没更新的标记为 stale，不参与告警
     """
     conn = store.read_conn()
@@ -252,51 +322,31 @@ def load_quota_items(store: Store, stale_sec: int) -> list[QuotaItem]:
 
     rows = conn.execute(
         """
-        SELECT q.source, q.account, q.window, q.remaining_pct,
-               q.remaining_amt, q.currency, q.resets_at, q.ts
-        FROM quota_snapshots q
-        JOIN (
-            SELECT source, COALESCE(account,'') AS acct,
-                   COALESCE(window,'') AS win, MAX(ts) AS max_ts
-            FROM quota_snapshots
-            GROUP BY source, acct, win
-        ) latest
-          ON q.source = latest.source
-         AND COALESCE(q.account,'') = latest.acct
-         AND COALESCE(q.window,'')  = latest.win
-         AND q.ts = latest.max_ts
-        ORDER BY q.source, q.account, q.window
+        SELECT source, account, window, remaining_pct,
+               remaining_amt, currency, resets_at, ts
+        FROM (
+            SELECT q.*, ROW_NUMBER() OVER (
+                PARTITION BY source, COALESCE(account,''), COALESCE(window,'')
+                ORDER BY ts DESC, id DESC
+            ) AS row_num
+            FROM quota_snapshots q
+        )
+        WHERE row_num = 1
+        ORDER BY source, account, window
         """
     ).fetchall()
 
     items: list[QuotaItem] = []
-    burn = compute_burn(conn)
+    burn = compute_burn(conn, stale_sec=stale_sec, now=now)
     for r in rows:
         pct = r["remaining_pct"]
         amt = r["remaining_amt"]
-
-        if pct is None and amt is not None:
-            peak = conn.execute(
-                """
-                SELECT MAX(remaining_amt) AS peak FROM quota_snapshots
-                WHERE source = ? AND COALESCE(account,'') = COALESCE(?,'')
-                  AND COALESCE(window,'') = COALESCE(?,'')
-                  AND remaining_amt IS NOT NULL
-                """,
-                (r["source"], r["account"], r["window"]),
-            ).fetchone()
-            base = (peak["peak"] if peak else None) or 0
-            if base > 0:
-                pct = max(0.0, min(100.0, float(amt) / float(base) * 100.0))
-
-        if pct is None:
-            continue
 
         items.append(QuotaItem(
             source=r["source"],
             account=r["account"] or "—",
             window=r["window"] or "—",
-            remaining_pct=float(pct),
+            remaining_pct=float(pct) if pct is not None else None,
             remaining_amt=amt,
             currency=r["currency"],
             resets_at=r["resets_at"],
@@ -306,8 +356,12 @@ def load_quota_items(store: Store, stale_sec: int) -> list[QuotaItem]:
         b = burn.get((r["source"], r["account"] or "", r["window"] or ""))
         if b:
             q = items[-1]
-            q.burn_per_hour = b["per_hour"]
+            q.burn_per_hour = round(b["per_hour"], 4)
             q.burn_per_day = b["per_day"]
+            q.sample_span_hours = b["sample_span_hours"]
+            q.sample_count = b["sample_count"]
+            q.prediction_note = ("近期样本线性外推，仅供参考；无重置时间" if q.resets_at is None
+                                 else "近期样本线性外推，仅供参考")
             q.hours_left = b["hours_left"]
             q.days_left = b["days_left"]
             # 有重置时间就换算到「重置前预计剩多少」——直接拿百分比当天数用会误导：

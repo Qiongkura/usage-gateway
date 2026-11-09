@@ -5,18 +5,22 @@
 两个关键口径：
   1. session_prompt_tokens 已包含 cached，输入要减掉避免重复计算；
   2. 会话级统计是「累计值」，活跃会话每分钟都会变大 —— 直接整份入账会重复统计。
-     这里按「上次快照的差值」入账，状态持久化到 data_dir/vibe_state.json，
-     网关重启后也不会把同一会话的累计值重复算一遍。
+     这里按「上次快照的差值」入账；调度器将快照与用量一同存入数据库。
+     首次迁移时读取原有的 data_dir/vibe_state.json。
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Iterable
 
 from ..models import UsageRecord
 from .base import Collector
+
+log = logging.getLogger(__name__)
 
 
 def default_home() -> Path:
@@ -59,42 +63,112 @@ class VibeCollector(Collector):
     # ---------- 采集 ----------
 
     def collect_usage(self, since_ts: int) -> Iterable[UsageRecord]:
-        session_root = self.home / "logs" / "session"
-        if not session_root.exists():
-            return []
+        previous = self._last
+        records, state = self._collect(since_ts, previous, inclusive=False)
+        self._last = state
+        if state != previous:
+            self._save_state()
+        return records
 
-        changed = False
+    def prepare_usage(self, since_ts: int, cursor: str | None) -> tuple[list[UsageRecord], str]:
+        if cursor is None:
+            state = self._load_state()
+        else:
+            state = json.loads(cursor)
+            if not isinstance(state, dict):
+                raise ValueError("invalid Vibe collector state")
+        records, state = self._collect(since_ts, state, inclusive=True)
+        return records, json.dumps(state, ensure_ascii=False)
+
+    def _collect(self, since_ts: int, previous: dict[str, dict], *, inclusive: bool
+                 ) -> tuple[list[UsageRecord], dict[str, dict]]:
+        state = previous.copy()
+        session_root = self.home / "logs" / "session"
+        try:
+            scan = os.scandir(session_root)
+        except FileNotFoundError:
+            return [], state
+        with scan as entries:
+            session_dirs = [Path(entry.path) for entry in entries if entry.is_dir()]
+
         records: list[UsageRecord] = []
-        for meta_path in session_root.glob("*/meta.json"):
+        for session_dir in session_dirs:
+            meta_path = session_dir / "meta.json"
+            sid = meta_path.parent.name
             try:
                 mtime = int(meta_path.stat().st_mtime)
-                if mtime <= since_ts:
-                    continue
+            except OSError:
+                if inclusive and sid not in state:
+                    state[sid] = {"pending": True}
+                continue
+            if (not inclusive and mtime <= since_ts) or (
+                inclusive and sid not in state and mtime < since_ts
+            ):
+                continue
+            try:
                 data = json.loads(meta_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                if inclusive and sid not in state:
+                    state[sid] = {"pending": True}
                 continue
 
-            stats = data.get("metadata") or data.get("session_stats") or data
-            prompt = int(stats.get("session_prompt_tokens", 0) or 0)
-            cached = int(stats.get("session_cached_tokens", 0) or 0)
-            completion = int(stats.get("session_completion_tokens", 0) or 0)
-            if prompt == 0 and completion == 0:
+            if not isinstance(data, dict):
+                if inclusive and sid not in state:
+                    state[sid] = {"pending": True}
                 continue
+            keys = ("session_prompt_tokens", "session_cached_tokens", "session_completion_tokens")
+            stats = next((candidate for candidate in
+                          (data.get("metadata"), data.get("session_stats"), data.get("stats"), data)
+                          if isinstance(candidate, dict) and any(key in candidate for key in keys)), None)
+            prev = state.get(sid)
+            pending = isinstance(prev, dict) and prev.get("pending") is True
+            if pending:
+                prev = None
+            if stats is None:
+                if inclusive and sid not in state:
+                    state[sid] = {"pending": True}
+                continue
+            try:
+                def counter(key: str, previous_key: str) -> int:
+                    value = stats.get(key)
+                    return int(value if value is not None else (prev.get(previous_key, 0) if prev else 0))
 
-            sid = meta_path.parent.name
-            prev = self._last.get(sid)
+                prompt = counter("session_prompt_tokens", "t")
+                cached = counter("session_cached_tokens", "c")
+                completion = counter("session_completion_tokens", "o")
+            except (TypeError, ValueError):
+                if inclusive and sid not in state:
+                    state[sid] = {"pending": True}
+                continue
+            if min(prompt, cached, completion) < 0:
+                if inclusive and sid not in state:
+                    state[sid] = {"pending": True}
+                continue
+            if prompt == 0 and cached == 0 and completion == 0 and not prev:
+                if inclusive:
+                    state[sid] = {"t": 0, "c": 0, "o": 0, "mtime": mtime, "seq": 0}
+                continue
             base_in = int(prev["t"]) if prev else 0
             base_cache = int(prev["c"]) if prev else 0
             base_out = int(prev["o"]) if prev else 0
-            # 累计值理论上单调递增；出现回退（新周期重置）时按 0 记，避免负数
-            d_prompt = max(0, prompt - base_in)
-            d_cached = max(0, cached - base_cache)
-            d_out = max(0, completion - base_out)
-            if d_prompt == 0 and d_cached == 0 and d_out == 0:
+            # A decreasing counter starts a new observed cycle for that counter.
+            d_prompt = prompt - base_in if prompt >= base_in else prompt
+            d_cached = cached - base_cache if cached >= base_cache else cached
+            d_out = completion - base_out if completion >= base_out else completion
+            if d_cached > d_prompt:
+                log.warning(
+                    "Vibe cached-token increment exceeds prompt increment; "
+                    "recorded token totals may be overstated"
+                )
+            changed = (prompt, cached, completion) != (base_in, base_cache, base_out)
+            if not changed:
                 continue
 
-            self._last[sid] = {"t": prompt, "c": cached, "o": completion, "mtime": mtime}
-            changed = True
+            sequence = int(prev.get("seq", 0)) + 1 if prev else 1
+            state[sid] = {"t": prompt, "c": cached, "o": completion, "mtime": mtime, "seq": sequence}
+            if d_prompt == 0 and d_cached == 0 and d_out == 0:
+                continue
+            identity = json.dumps([sid, sequence, mtime, prompt, cached, completion], ensure_ascii=False)
             records.append(UsageRecord(
                 ts=mtime,
                 source=self.name,
@@ -103,13 +177,13 @@ class VibeCollector(Collector):
                 input_tokens=max(0, d_prompt - d_cached),
                 cache_read=d_cached,
                 output_tokens=d_out,
+                raw={"request_id": "vibe-snapshot-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()}
+                if inclusive else None,
             ))
 
-        if changed:
-            if len(self._last) > self.MAX_TRACKED_SESSIONS:
-                for sid in sorted(
-                    self._last, key=lambda s: self._last[s].get("mtime", 0)
-                )[: len(self._last) - self.MAX_TRACKED_SESSIONS]:
-                    self._last.pop(sid, None)
-            self._save_state()
-        yield from records
+        if not inclusive and len(state) > self.MAX_TRACKED_SESSIONS:
+            for sid in sorted(
+                state, key=lambda s: state[s].get("mtime", 0)
+            )[: len(state) - self.MAX_TRACKED_SESSIONS]:
+                state.pop(sid, None)
+        return records, state
