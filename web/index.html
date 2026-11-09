@@ -62,6 +62,15 @@
   .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
         border-radius:999px;padding:6px 12px;font-size:12.5px;background:var(--card);cursor:pointer}
   .pill.active{background:var(--chip-active-bg);color:var(--chip-active-text);border-color:var(--chip-active-bg)}
+  button.pill, .pager button, button.chip, button.tab{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 12px;cursor:pointer}
+  button.pill:hover:not(.active), .pager button:hover:not(:disabled), button.chip:hover{background:var(--hover)}
+  button.tab:hover:not(.active){background:var(--hover)}
+  button:disabled{opacity:.4;cursor:default}
+  button:focus-visible, select:focus-visible, input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  button.line-item{max-width:100%;text-align:left}
+  .line-item .line-dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .line-item .line-label{min-width:0;overflow-wrap:anywhere}
+  .line-item .line-count{color:var(--muted);white-space:nowrap;flex:none}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
   .updated{color:var(--muted);font-size:12px;text-align:right;margin-bottom:12px}
 
@@ -72,8 +81,8 @@
   .tab.active{background:var(--chip-active-bg);color:var(--chip-active-text);border-color:var(--chip-active-bg)}
 
   .grid{display:grid;gap:14px;margin-bottom:14px}
-  .g2{grid-template-columns:1fr 1fr}
-  .g4{grid-template-columns:repeat(4,1fr)}
+  .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .g4{grid-template-columns:repeat(4,minmax(0,1fr))}
 
   .card{background:var(--card);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);
         border-top:3px solid transparent;position:relative;overflow:hidden}
@@ -83,7 +92,7 @@
   .card.orange{border-top-color:var(--orange)}
   .card.teal{border-top-color:var(--teal)}
   .card .label{color:var(--muted);font-size:12.5px;letter-spacing:.03em;margin-bottom:10px}
-  .card .value{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .card .value{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.1;overflow-wrap:anywhere}
   .card .sub{color:var(--muted);font-size:12px;margin-top:8px}
   .icon{position:absolute;top:16px;right:16px;width:30px;height:30px;border-radius:9px;
         display:grid;place-items:center;color:#fff;font-size:14px}
@@ -92,7 +101,7 @@
   .icon.teal{background:var(--teal)}
   .spark{height:44px;margin-top:12px}
 
-  .section{background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow);margin-bottom:14px}
+  .section{background:var(--card);border-radius:14px;padding:20px;box-shadow:var(--shadow);margin-bottom:14px;min-width:0;overflow-x:auto}
   .section h3{margin:0 0 4px;font-size:15px}
   .section .desc{color:var(--muted);font-size:12px;margin-bottom:16px}
   .chart-box{height:280px;position:relative}
@@ -108,6 +117,11 @@
   td{padding:9px 10px;border-bottom:1px solid var(--row-line)}
   tr:last-child td{border-bottom:none}
   .num{text-align:right;font-variant-numeric:tabular-nums}
+  .model-sources{margin-top:4px;color:var(--muted);font-size:11.5px}
+  .model-sources summary{cursor:pointer;width:fit-content}
+  .model-sources ul{list-style:none;padding:0 0 0 14px;margin:5px 0 0}
+  .model-sources li{padding:2px 0;overflow-wrap:anywhere}
+  .model-table{min-width:700px}
   .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;background:var(--tag-bg);color:var(--tag-text)}
   .empty{color:var(--muted);text-align:center;padding:30px 0;font-size:13px}
 
@@ -132,10 +146,11 @@
   .bill-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:12.5px;
             font-variant-numeric:tabular-nums;max-width:640px}
   .bill-row .k{color:var(--muted)} .bill-row .v{font-weight:600}
-  .pager{display:flex;align-items:center;gap:12px;justify-content:flex-end;margin-top:12px;
+  .pager{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-end;margin-top:12px;
          font-size:12.5px;color:var(--muted)}
+  .pager button,.pager span{white-space:nowrap}
   .pager .pill{user-select:none}
-  .pager .pill.disabled{opacity:.35;pointer-events:none}
+  .pager button:disabled{opacity:.35;pointer-events:none}
   .cost{font-weight:700;font-variant-numeric:tabular-nums;color:var(--orange)}
 
   /* 额度（紧凑卡片）：多列瀑布式——最高的渠道独占左列，其余按高度自动堆到右列 */
@@ -176,8 +191,18 @@
   tr.lvl-critical td:first-child{border-left:2px solid var(--red);padding-left:8px}
   tr.lvl-stale{opacity:.5}
 
-  @media(max-width:1100px){.g4{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}}
-  @media(max-width:640px){.g4{grid-template-columns:1fr}}
+  @media(max-width:1100px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g2{grid-template-columns:minmax(0,1fr)}}
+  @media(max-width:720px){
+    .wrap{padding:14px 14px 48px}
+    .toolbar{align-items:flex-start;flex-wrap:wrap;gap:12px}
+    .toolbar>div:last-child{width:100%;flex-wrap:wrap}
+    header{padding:12px 14px}
+    .head-right{flex-wrap:wrap;justify-content:flex-end}
+    .htl-toolbar, .htl-meta{flex-wrap:wrap;gap:10px}
+    table:not(.qtable) th{white-space:nowrap}
+  }
+  @media(max-width:640px){.g4{grid-template-columns:minmax(0,1fr)}}
+  @media(max-width:400px){.card .value{font-size:28px}}
 </style>
 </head>
 <body>
@@ -186,39 +211,50 @@
     <div class="brand">Usage Gateway</div>
     <div class="head-right">
       <span class="pill"><span class="dot"></span><span id="status" data-i18n="st.connecting">连接中</span></span>
-      <span class="pill active" data-lang="zh">中</span>
-      <span class="pill" data-lang="en">EN</span>
-      <span class="pill" id="theme-toggle" title="Theme">🌙</span>
+      <button type="button" class="pill active" data-lang="zh">中</button>
+      <button type="button" class="pill" data-lang="en">EN</button>
+      <button type="button" class="pill" id="theme-toggle" title="Theme">🌙</button>
     </div>
   </header>
 
   <div class="updated"><span data-i18n="hdr.updated">最近更新：</span><span id="updated">--:--:--</span></div>
+  <div class="filterbar">
+    <label for="stats-key" data-i18n="auth.label">统计读取密钥（可选，仅保存在本页内存）</label>
+    <input id="stats-key" type="password" autocomplete="off" class="pill">
+    <button id="stats-key-apply" class="pill" data-i18n="auth.apply">应用</button>
+    <span id="stats-auth-error" role="alert" style="display:none;color:var(--red)" data-i18n="auth.denied">统计读取未授权，请检查统计密钥。</span>
+  </div>
 
   <div class="alertbar" id="alertbar">
     <div class="alertbar-head">
       <span data-i18n="alert.title">⚠ 额度告警</span>
       <span class="cnt" id="alertbar-cnt"></span>
+      <span class="cnt" id="alertbar-state" role="status"></span>
     </div>
     <div id="alertbar-rows"></div>
   </div>
 
   <div class="toolbar">
     <div class="tabs">
-      <span class="tab active" data-tab="overview" data-i18n="tab.overview">概览</span>
-      <span class="tab" data-tab="logs" data-i18n="tab.logs">调用明细</span>
+      <button type="button" class="tab active" data-tab="overview" data-i18n="tab.overview">概览</button>
+      <button type="button" class="tab" data-tab="logs" data-i18n="tab.logs">调用明细</button>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       <select id="range" class="pill" style="padding:8px 14px">
         <option value="today" data-i18n="range.today">今天</option>
-        <option value="7d" selected data-i18n="range.7d">最近 7 天</option>
+        <option value="1d" selected data-i18n="range.1d">最近 24 小时</option>
+        <option value="3d" data-i18n="range.3d">最近 3 天</option>
+        <option value="7d" data-i18n="range.7d">最近 7 天</option>
         <option value="30d" data-i18n="range.30d">最近 30 天</option>
         <option value="all" data-i18n="range.all">全部</option>
       </select>
-      <span class="pill" id="refresh" data-i18n="btn.refresh">↻ 刷新</span>
+      <button type="button" class="pill" id="refresh" data-i18n="btn.refresh">↻ 刷新</button>
     </div>
   </div>
 
   <div id="view-overview">
+  <div id="overview-state" class="empty" role="status" style="display:none"></div>
+  <div id="overview-content">
   <div class="grid g2">
     <div class="card blue">
       <div class="icon blue">⚡</div>
@@ -287,65 +323,74 @@
       <span data-i18n="s.htl_desc1">最近</span> <span id="htl-minutes">24 小时</span><span data-i18n="s.htl_desc2">，每格</span>
       <span id="htl-bucket">2</span> <span data-i18n="s.htl_desc3">分钟，按列从上到下、再从左到右阅读</span>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="display:flex;gap:8px">
-        <span class="pill htl-range" data-min="360" data-i18n="htl.6h">6 小时</span>
-        <span class="pill htl-range active" data-min="1440" data-i18n="htl.24h">24 小时</span>
+    <div class="htl-toolbar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button type="button" class="pill htl-range active" aria-pressed="true" data-min="1440" data-i18n="htl.24h">24 小时</button>
+        <button type="button" class="pill htl-range" aria-pressed="false" data-min="4320" data-i18n="htl.3d">3 天</button>
+        <button type="button" class="pill htl-range" aria-pressed="false" data-min="10080" data-i18n="htl.7d">7 天</button>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;font-size:12px">
+      <div class="htl-meta" style="display:flex;align-items:center;gap:10px;font-size:12px">
         <span id="htl-stats" style="color:#8b909a"></span>
-        <span style="display:flex;align-items:center;gap:4px">
-          <i style="width:9px;height:9px;border-radius:2px;background:#10b981;display:inline-block"></i><span data-i18n="htl.l_ok">成功</span>
-          <i style="width:9px;height:9px;border-radius:2px;background:#f59e0b;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_part">部分失败</span>
-          <i style="width:9px;height:9px;border-radius:2px;background:#ef4444;display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_all">全失败</span>
-          <i style="width:9px;height:9px;border-radius:2px;background:var(--heat-empty);display:inline-block;margin-left:6px"></i><span data-i18n="htl.l_none">无请求</span>
+        <span class="htl-legend" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px" data-i18n-title="htl.legend_tip" title="颜色按成功与失败判定；仅有取消或未知时显示灰色。">
+          <span style="white-space:nowrap"><i style="width:9px;height:9px;border-radius:2px;background:#10b981;display:inline-block;margin-right:4px"></i><span data-i18n="htl.l_ok">成功</span></span>
+          <span style="white-space:nowrap"><i style="width:9px;height:9px;border-radius:2px;background:#f59e0b;display:inline-block;margin-right:4px"></i><span data-i18n="htl.l_part">部分失败</span></span>
+          <span style="white-space:nowrap"><i style="width:9px;height:9px;border-radius:2px;background:#ef4444;display:inline-block;margin-right:4px"></i><span data-i18n="htl.l_all">全失败</span></span>
+          <span style="white-space:nowrap"><i style="width:9px;height:9px;border-radius:2px;background:#8b909a;display:inline-block;margin-right:4px"></i><span data-i18n="htl.l_unresolved">取消 / 未知</span></span>
+          <span style="white-space:nowrap"><i style="width:9px;height:9px;border-radius:2px;background:var(--heat-empty);display:inline-block;margin-right:4px"></i><span data-i18n="htl.l_none">无请求</span></span>
         </span>
       </div>
     </div>
-    <div id="htl-grid" style="display:flex;flex-direction:column;gap:2px"></div>
-    <div id="htl-axis" style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#8b909a"></div>
+    <div id="htl-state" role="status" style="display:none;color:var(--muted);font-size:12px;margin-bottom:10px"></div>
+    <div style="overflow-x:auto">
+      <div style="min-width:486px">
+        <div id="htl-grid" style="display:flex;flex-direction:column;gap:2px"></div>
+        <div id="htl-axis" style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:#8b909a"></div>
+      </div>
+    </div>
   </div>
 
   <div class="section">
     <h3 data-i18n="s.trend">Token 构成</h3>
-    <div class="desc" data-i18n="s.trend_desc">按时间聚合的输入 / 输出 / 缓存 / 推理 token（堆叠）</div>
-    <div class="chart-box"><canvas id="chart-trend"></canvas></div>
-    <div id="trend-empty" class="empty" style="display:none" data-i18n="s.trend_empty">
-      数据点不足（当前只有 1 个时间桶），多跑一会儿就能看到趋势
-    </div>
+    <div class="desc" data-i18n="s.trend_desc">未命中输入、缓存读取、缓存写入与输出；推理包含在输出中</div>
+    <div id="trend-box" class="chart-box"><canvas id="chart-trend"></canvas></div>
+    <div id="trend-empty" class="empty" style="display:none" data-i18n="state.empty">暂无数据</div>
   </div>
 
   <div class="section">
     <h3 data-i18n="s.cost_trend">成本趋势</h3>
-    <div class="desc" data-i18n="s.cost_trend_desc">按时间聚合的 USD 成本</div>
-    <div class="chart-box" style="height:220px"><canvas id="chart-cost"></canvas></div>
+    <div class="desc" data-i18n="s.cost_trend_desc">仅统计记录价格；包含未定价记录的时段显示为缺口</div>
+    <div id="cost-box" class="chart-box" style="height:220px"><canvas id="chart-cost"></canvas></div>
+    <div id="cost-empty" class="empty" style="display:none" data-i18n="state.empty">暂无数据</div>
   </div>
 
   <div class="section">
     <h3 data-i18n="s.lp">图表线条选择</h3>
     <div class="desc">
-      <span data-i18n="s.lp_desc">选择要在趋势图中对比的模型。</span>
+      <span data-i18n="s.lp_desc">按渠道和模型选择趋势；数字为请求次数。</span>
       <span id="line-count" style="color:#8b909a"></span>
     </div>
+    <div id="trend-state" class="empty" role="status" style="display:none"></div>
     <div id="line-picker" style="display:flex;flex-wrap:wrap;gap:8px"></div>
   </div>
 
   <div class="grid g2">
     <div class="section" style="margin-bottom:0">
       <h3 data-i18n="s.req_trend">请求趋势</h3>
-      <div class="desc" data-i18n="s.req_trend_desc">按时间的请求数</div>
-      <div class="chart-box" style="height:200px"><canvas id="chart-requests"></canvas></div>
+      <div class="desc"><span data-i18n="s.req_trend_desc">每个时段的请求数</span> <span id="requests-total"></span></div>
+      <div id="requests-box" class="chart-box" style="height:200px"><canvas id="chart-requests"></canvas></div>
+      <div id="requests-empty" class="empty" style="display:none" data-i18n="state.empty">暂无数据</div>
     </div>
     <div class="section" style="margin-bottom:0">
       <h3 data-i18n="s.tok_trend">Token 趋势</h3>
-      <div class="desc" data-i18n="s.tok_trend_desc">按时间的 token 总量</div>
-      <div class="chart-box" style="height:200px"><canvas id="chart-tokens"></canvas></div>
+      <div class="desc"><span data-i18n="s.tok_trend_desc">每个时段的 Token 数</span> <span id="tokens-total"></span></div>
+      <div id="tokens-box" class="chart-box" style="height:200px"><canvas id="chart-tokens"></canvas></div>
+      <div id="tokens-empty" class="empty" style="display:none" data-i18n="state.empty">暂无数据</div>
     </div>
   </div>
 
   <div class="section">
     <h3 data-i18n="s.heat">活跃热力图</h3>
-    <div class="desc" data-i18n="s.heat_desc">最近 365 天每天的 token 用量，颜色越深用得越多</div>
+    <div class="desc" data-i18n="s.heat_desc">按服务器本地日期统计最近 365 天的 token 用量，颜色越深用得越多</div>
     <div id="heatmap" style="overflow-x:auto;padding-bottom:8px"></div>
     <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:#8b909a">
       <span>少</span>
@@ -360,7 +405,7 @@
 
   <div class="section">
     <h3 data-i18n="s.by_source">按来源</h3>
-    <div class="desc" data-i18n="s.by_source_desc">每个上游渠道的用量与成本</div>
+    <div class="desc" data-i18n="s.by_source_desc">费用仅统计记录价格；* 表示部分记录未定价</div>
     <table>
       <thead><tr><th data-i18n="th.source">来源</th><th data-i18n="th.type">类型</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.input">输入</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.cache">缓存</th><th class="num" data-i18n="th.speed">速度</th><th class="num" data-i18n="th.cost_list">成本（原价）</th><th class="num" data-i18n="th.per_mtok">每百万 token</th></tr></thead>
       <tbody id="tb-source"></tbody>
@@ -369,7 +414,7 @@
 
   <div class="section">
     <h3 data-i18n="s.cost_detail">成本明细（上游 × 模型）</h3>
-    <div class="desc" data-i18n="s.cost_detail_desc">同一模型在不同上游价格不同，这里按实际调用的上游计价</div>
+    <div class="desc" data-i18n="s.cost_detail_desc">费用仅统计记录价格；* 表示部分记录未定价</div>
     <table>
       <thead><tr><th data-i18n="th.upstream">上游</th><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.input">输入</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.cost">成本</th><th class="num" data-i18n="th.avg_cost">单次均价</th></tr></thead>
       <tbody id="tb-cost"></tbody>
@@ -379,15 +424,15 @@
   <div class="grid g2">
     <div class="section" style="margin-bottom:0">
       <h3 data-i18n="s.by_model">按模型</h3>
-      <div class="desc" data-i18n="s.by_model_desc">Top 模型用量</div>
-      <table>
-        <thead><tr><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.input">输入</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.reasoning">推理</th></tr></thead>
+      <div class="desc" data-i18n="s.by_model_desc">同名模型跨渠道汇总；总 Token 为未命中输入、缓存读写与输出之和，推理包含在输出中</div>
+      <table class="model-table">
+        <thead><tr><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.input">输入</th><th class="num" data-i18n="th.cache">缓存读+写</th><th class="num" data-i18n="th.output">输出</th><th class="num" data-i18n="th.total">总 Token</th><th class="num" data-i18n="th.reasoning">推理</th></tr></thead>
         <tbody id="tb-model"></tbody>
       </table>
     </div>
     <div class="section" style="margin-bottom:0">
       <h3 data-i18n="s.by_key">按客户端 Key</h3>
-      <div class="desc" data-i18n="s.by_key_desc">每个 key 的用量与成本</div>
+      <div class="desc" data-i18n="s.by_key_desc">费用仅统计记录价格；* 表示部分记录未定价</div>
       <table>
         <thead><tr><th data-i18n="th.key">Key</th><th class="num" data-i18n="th.requests">请求</th><th class="num" data-i18n="th.tokens">Token</th><th class="num" data-i18n="th.cost">成本</th></tr></thead>
         <tbody id="tb-key"></tbody>
@@ -416,6 +461,7 @@
   <div class="section">
     <h3 data-i18n="s.traces">请求链路追踪</h3>
     <div class="desc" data-i18n="s.traces_desc">最近 20 条请求的阶段耗时，用于排查慢请求</div>
+    <button type="button" class="chip" id="export-diagnostics" data-i18n="b.diagnostics">导出脱敏诊断</button>
     <table>
       <thead><tr><th data-i18n="th.time">时间</th><th data-i18n="th.upstream">上游</th><th data-i18n="th.model">模型</th><th class="num" data-i18n="th.status">状态</th><th class="num" data-i18n="th.total_ms">总耗时</th><th data-i18n="th.chain">链路</th></tr></thead>
       <tbody id="tb-traces"></tbody>
@@ -430,7 +476,8 @@
       <tbody id="tb-routes"></tbody>
     </table>
   </div>
-  </div><!-- /view-overview -->
+  </div><!-- /overview-content -->
+</div><!-- /view-overview -->
 
   <div id="view-logs" style="display:none">
     <div class="section">
@@ -439,7 +486,8 @@
       <div class="filterbar">
         <select id="l-range" class="pill">
           <option value="today" data-i18n="range.today">今天</option>
-          <option value="1d" data-i18n="range.1d">最近 24 小时</option>
+          <option value="1d" selected data-i18n="range.1d">最近 24 小时</option>
+          <option value="3d" data-i18n="range.3d">最近 3 天</option>
           <option value="7d" data-i18n="range.7d">最近 7 天</option>
           <option value="30d" data-i18n="range.30d">最近 30 天</option>
           <option value="all" data-i18n="range.all">全部</option>
@@ -449,25 +497,37 @@
         <select id="l-origin" class="pill">
           <option value="gateway" data-i18n="origin.gateway">网关实时</option>
           <option value="collector" data-i18n="origin.collector">本地采集</option>
-          <option value="all" data-i18n="origin.all">全部来源</option>
+          <option value="all" selected data-i18n="origin.all">全部来源</option>
         </select>
         <select id="l-status" class="pill">
           <option value="all" data-i18n="status.all">全部状态</option>
           <option value="success" data-i18n="status.success">仅成功</option>
           <option value="error" data-i18n="status.error">仅失败</option>
+          <option value="cancelled" data-i18n="status.cancelled">客户端取消</option>
+          <option value="unknown" data-i18n="status.unknown">结果未知</option>
         </select>
         <input id="l-model" class="pill" placeholder="搜索模型…" data-i18n-ph="logs.search_ph">
         <span style="flex:1"></span>
         <select id="l-auto" class="pill" data-i18n-title="auto.title" title="自动刷新">
-          <option value="0" data-i18n="auto.off">自动刷新：关</option>
-          <option value="5" selected data-i18n="auto.5">每 5 秒</option>
+          <option value="0" selected data-i18n="auto.off">自动刷新：关</option>
+          <option value="5" data-i18n="auto.5">每 5 秒</option>
           <option value="15" data-i18n="auto.15">每 15 秒</option>
           <option value="60" data-i18n="auto.60">每 60 秒</option>
         </select>
-        <span class="pill" id="l-export" data-i18n="btn.export">⬇ 导出 CSV</span>
-        <span class="pill" id="l-reload" data-i18n="btn.refresh">↻ 刷新</span>
+        <button type="button" class="pill" id="l-export" data-i18n="btn.export">⬇ 导出 CSV</button>
+        <button type="button" class="pill" id="l-reload" data-i18n="btn.refresh">↻ 刷新</button>
+      </div>
+      <div class="section">
+        <h3 data-i18n="sessions.title">会话费用</h3>
+        <div class="desc" data-i18n="sessions.note">仅汇总记录价格，不含补算；未定价数量表示记录中没有价格，与下方补算账单口径不同。点击会话筛选明细。</div>
+        <div id="sessions-state" role="status" style="display:none"></div>
+        <div id="sessions-list"></div>
+        <div class="pager"><button id="sessions-prev" data-i18n="page.prev">上一页</button> <span id="sessions-page"></span> <button id="sessions-next" data-i18n="page.next">下一页</button> <button id="sessions-clear" data-i18n="sessions.clear">全部会话</button></div>
+        <div id="sessions-selected"></div>
       </div>
       <div class="summarybar" id="l-summary"></div>
+      <div id="export-state" class="empty" role="status" style="display:none"></div>
+      <div id="logs-state" class="empty" role="status" style="display:none"></div>
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
@@ -485,9 +545,9 @@
         </table>
       </div>
       <div class="pager">
-        <span class="pill" id="l-prev">‹ <span data-i18n="page.prev">上一页</span></span>
+        <button type="button" class="pill" id="l-prev">‹ <span data-i18n="page.prev">上一页</span></button>
         <span id="l-pageinfo">- / -</span>
-        <span class="pill" id="l-next"><span data-i18n="page.next">下一页</span> ›</span>
+        <button type="button" class="pill" id="l-next"><span data-i18n="page.next">下一页</span> ›</button>
       </div>
     </div>
   </div><!-- /view-logs -->
@@ -496,6 +556,33 @@
 <script>
 const $ = id => document.getElementById(id);
 const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let statsKey = '';
+let statsKeyVersion = 0;
+async function apiFetch(path, options = {}){
+  const url = new URL(path, location.href);
+  if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) throw new Error('Invalid API path');
+  const version = statsKeyVersion;
+  const headers = new Headers(options.headers || {});
+  if (statsKey) {
+    try { headers.set('X-Stats-Key-Encoded', encodeURIComponent(statsKey)); }
+    catch (_) { throw new Error('Invalid statistics key'); }
+  }
+  const response = await fetch(url.href, {...options, headers});
+  if (response.status === 401) {
+    if (version === statsKeyVersion) $('stats-auth-error').style.display = '';
+    throw new Error('Statistics authorization failed');
+  }
+  if (!response.ok) {
+    const error = new Error(`API request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
+  return response;
+}
+
+function finiteNumber(value, min = -Number.MAX_VALUE, max = Number.MAX_VALUE){
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max ? value : null;
+}
 
 function fmt(n){
   n = Number(n) || 0;
@@ -504,6 +591,7 @@ function fmt(n){
   if (n >= 1e4) return (n/1e3).toFixed(1)+'K';
   return n.toLocaleString();
 }
+function fmtExact(n){ return (Number(n) || 0).toLocaleString(); }
 function fmtTime(ts){
   if (!ts) return '—';
   const d = new Date(ts*1000);
@@ -524,10 +612,17 @@ function fmtReset(ts){
 function renderAlerts(data){
   const bar = $('alertbar');
   if (!bar) return;
+  if (data === null) {
+    bar.classList.add('show');
+    $('alertbar-state').textContent = $('alertbar-rows').innerHTML ? t('state.stale') : t('state.error');
+    return;
+  }
+  $('alertbar-state').textContent = '';
   const items = (data && data.items) || [];
   const bad = items.filter(i => i.level === 'critical' || i.level === 'warn');
   if (!data || data.enabled === false || !bad.length) {
     bar.classList.remove('show', 'critical');
+    $('alertbar-cnt').textContent = '';
     $('alertbar-rows').innerHTML = '';
     return;
   }
@@ -537,13 +632,17 @@ function renderAlerts(data){
   $('alertbar-cnt').textContent =
     t('alert.summary', critical, bad.length - critical) +
     (data.config ? t('alert.threshold', data.config.warn_pct, data.config.critical_pct) : '');
-  $('alertbar-rows').innerHTML = bad.map(i => `
-    <div class="alertrow">
+  $('alertbar-rows').innerHTML = bad.map(i => {
+    const pct = finiteNumber(i.remaining_pct, 0, 100);
+    const amount = finiteNumber(i.remaining_amt);
+    const reset = finiteNumber(i.resets_at, 0, 8640000000000);
+    return `<div class="alertrow">
       <span class="lvl ${i.level}"></span>
-      <span class="who">${i.source} · ${i.account} · ${i.window}</span>
-      <span class="pct ${i.level}">${i.remaining_pct.toFixed(1)}%</span>
-      <span class="reset">${i.remaining_amt != null ? (i.currency||'')+' '+i.remaining_amt.toFixed(2)+' · ' : ''}${fmtReset(i.resets_at)}</span>
-    </div>`).join('');
+      <span class="who">${escapeHtml(i.source)} · ${escapeHtml(i.account)} · ${escapeHtml(i.window)}</span>
+      <span class="pct ${i.level}">${pct == null ? '—' : pct.toFixed(1) + '%'}</span>
+      <span class="reset">${amount == null ? '' : escapeHtml(i.currency || '') + ' ' + amount.toFixed(2) + ' · '}${fmtReset(reset)}</span>
+    </div>`;
+  }).join('');
 }
 
 let sparkReq, sparkTok, trendChart, costChart, reqChart, tokChart;
@@ -553,8 +652,19 @@ let selectedModels = [];     // 用户选中的模型（用于趋势对比）
 const MODEL_COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444',
                       '#14b8a6','#ec4899','#84cc16','#6366f1','#f97316'];
 
-function modelKey(m) { return `${m.source}/${m.model}`; }
-function modelLabel(m) { return `${m.source} · ${m.model}`; }
+function modelKey(m) { return JSON.stringify([m.source, m.model]); }
+function modelLabel(m) { return `${m.source || t('model.empty_source')} · ${m.model == null ? t('model.missing') : m.model === '' ? t('model.empty') : m.model}`; }
+
+function modelSourcesMarkup(model, models, expanded = false){
+  if (!Array.isArray(models)) return '';
+  const items = models.filter(item => (item.model ?? '(unknown)') === model.grp);
+  if (!items.length) return '';
+  const mixedModels = new Set(items.map(item => item.model)).size > 1;
+  const label = mixedModels ? 'model.source_models' : items.length === 1 ? 'model.source_one' : 'model.sources';
+  return `<details class="model-sources" data-model="${escapeHtml(model.grp)}"${expanded ? ' open' : ''}><summary>${escapeHtml(t(label, items.length))}</summary><ul>${items.map(item =>
+    `<li>${escapeHtml(item.source || t('model.empty_source'))}${mixedModels ? ' · ' + escapeHtml(item.model == null ? t('model.missing') : t('model.named', item.model)) : ''} · ${escapeHtml(t(item.requests === 1 ? 'model.source_counts_one' : 'model.source_counts', fmtExact(item.requests), fmtExact(item.tokens)))}</li>`
+  ).join('')}</ul></details>`;
+}
 
 function renderLinePicker(){
   const el = $('line-picker');
@@ -568,11 +678,11 @@ function renderLinePicker(){
     const key = modelKey(m);
     const on = selectedModels.includes(key);
     const color = MODEL_COLORS[i % MODEL_COLORS.length];
-    return `<span class="pill line-item" data-key="${key}"
+    return `<button type="button" class="pill line-item" aria-pressed="${on}" data-key="${escapeHtml(key)}"
       style="${on ? `background:${color}1a;border-color:${color};color:${color};font-weight:600` : ''}">
-      <i style="width:8px;height:8px;border-radius:50%;background:${on ? color : '#c9ced6'};display:inline-block"></i>
-      ${modelLabel(m)}<span style="color:#8b909a;margin-left:4px">${m.requests}</span>
-    </span>`;
+      <i class="line-dot" style="background:${on ? color : '#c9ced6'}"></i>
+      <span class="line-label">${escapeHtml(modelLabel(m))}</span><span class="line-count">${escapeHtml(t(m.requests === 1 ? 'lp.request_one' : 'lp.requests', fmtExact(m.requests)))}</span>
+    </button>`;
   }).join('');
 
   $('line-count').textContent = selectedModels.length
@@ -586,6 +696,8 @@ function renderLinePicker(){
       if (idx >= 0) selectedModels.splice(idx, 1);
       else selectedModels.push(key);
       renderLinePicker();
+      const replacement = [...el.querySelectorAll('.line-item')].find(item => item.dataset.key === key);
+      replacement?.focus();
       loadTrendCharts();
     };
   });
@@ -593,8 +705,21 @@ function renderLinePicker(){
 
 // 请求健康时间线：正方形矩阵（列优先：从上到下，再从左到右）
 let htlMinutes = 1440;
-const HTL_COLS = 60;   // 固定约 60 列：24h(2分钟/格) 与 6h(1分钟/格) 的格子大小一致，
-                       // 切换范围时只改变"每列行数"，不会把格子放大
+let htlSerial = 0;
+let htlHasData = false;
+let htlDisplayedMinutes = null;
+const HTL_COLS = 60;
+
+function syncHealthRange(range){
+  const minutes = {'1d':1440, '3d':4320, '7d':10080}[range];
+  if (!minutes) return;
+  htlMinutes = minutes;
+  document.querySelectorAll('.htl-range').forEach(el => {
+    const active = Number(el.dataset.min) === minutes;
+    el.classList.toggle('active', active);
+    el.setAttribute('aria-pressed', String(active));
+  });
+}
 
 function renderHealthTimeline(data){
   const grid = $('htl-grid');
@@ -605,10 +730,20 @@ function renderHealthTimeline(data){
   if (!buckets.length) {
     grid.innerHTML = `<div class="empty">${t('w.nodata')}</div>`;
     axis.innerHTML = '';
+    $('htl-stats').textContent = ''; $('htl-minutes').textContent = ''; $('htl-bucket').textContent = '';
+    const desc = document.querySelector('#htl-grid')?.closest('.section')?.querySelector('.desc');
+    if (desc) desc.title = '';
     return;
   }
 
-  const colors = { 0: '#eceef2', 1: '#ef4444', 2: '#f59e0b', 3: '#10b981' };
+  const colors = { 0: '#eceef2', 1: '#ef4444', 2: '#f59e0b', 3: '#10b981', 4: '#8b909a' };
+  const timeOffsets = new Map();
+  for (const bucket of buckets) {
+    if (!timeOffsets.has(bucket.time)) timeOffsets.set(bucket.time, new Set());
+    if (bucket.bucket_offset) timeOffsets.get(bucket.time).add(bucket.bucket_offset);
+  }
+  const timeLabel = bucket => timeOffsets.get(bucket.time).size > 1 && bucket.bucket_offset
+    ? `${bucket.time} ${bucket.bucket_offset}` : bucket.time;
 
   // 行数由数据量推导：cells ≈ 60 列 → 6h(360格) 6 行/列，24h(720格) 12 行/列
   const rows = Math.max(4, Math.min(12, Math.round(buckets.length / HTL_COLS)));
@@ -630,30 +765,31 @@ function renderHealthTimeline(data){
         html += '<div style="flex:1;aspect-ratio:1;min-width:6px"></div>';
         continue;
       }
+      const bucketLabel = timeLabel(b) + (b.partial ? ` · ${t('trend.partial')}` : '');
       const tip = b.total === 0
-        ? `${b.time}  ${t('htl.none')}`
-        : t('htl.tip', b.time, b.total, b.ok, b.failed, b.tokens.toLocaleString());
-      html += `<div title="${tip}" style="flex:1;aspect-ratio:1;min-width:6px;background:${colors[b.level]};border-radius:2px"></div>`;
+        ? `${bucketLabel}  ${t('htl.none')}`
+        : t('htl.tip', bucketLabel, b.total, b.ok, b.failed, b.tokens.toLocaleString()) +
+          (b.cancelled ? ` · ${t('l.cancelled')} ${b.cancelled}` : '') +
+          (b.unknown ? ` · ${t('status.unknown')} ${b.unknown}` : '');
+      html += `<div title="${escapeHtml(tip)}" style="flex:1;aspect-ratio:1;min-width:6px;background:${Object.hasOwn(colors, b.level) ? colors[b.level] : colors[0]};border-radius:2px"></div>`;
     }
     html += '</div>';
   }
   grid.innerHTML = html;
 
-  // 时间轴：列方向，每 5 列标一个时间
+  // 时间轴沿列方向均匀标注，保留完整的时间或日期。
   const bucketMin = data.bucket_sec / 60;
   const colMin = rows * bucketMin;
-  let axisHtml = '';
-  const step = Math.max(1, Math.round(cols / 12));
-  for (let c = 0; c < cols; c++) {
-    const b = matrix[c][0];
-    const show = c % step === 0;
-    axisHtml += `<span style="flex:1;text-align:left;white-space:nowrap;overflow:hidden">${show && b ? b.time : ''}</span>`;
-  }
-  axis.innerHTML = axisHtml;
+  const labelCount = Math.min(6, cols);
+  axis.innerHTML = Array.from({length:labelCount}, (_, i) => {
+    const col = labelCount === 1 ? 0 : Math.round(i * (cols - 1) / (labelCount - 1));
+    return `<span style="white-space:nowrap">${escapeHtml(timeLabel(matrix[col][0]))}</span>`;
+  }).join('');
 
-  const totalMin = cols * colMin;
+  const totalMin = data.minutes ?? cols * colMin;
   $('htl-stats').textContent =
-    t('htl.stats', data.total_requests, data.success_rate, data.active_buckets, buckets.length);
+    t('htl.stats', data.total_requests, data.success_rate == null ? '—' : data.success_rate + '%', data.active_buckets, buckets.length);
+  $('htl-stats').title = t('w.rate_tip');
   $('htl-minutes').textContent = totalMin >= 1440
     ? (totalMin / 1440).toFixed(1).replace(/\.0$/, '') + ' ' + t('u.day')
     : (totalMin >= 60 ? Math.round(totalMin / 60) + ' ' + t('u.hour') : Math.round(totalMin) + ' ' + t('u.min'));
@@ -664,14 +800,47 @@ function renderHealthTimeline(data){
   }
 }
 
-async function loadHealthTimeline(){
+function setHealthTimelineState(state){
+  const el = $('htl-state');
+  el.style.display = state ? '' : 'none';
+  if (!state) { el.textContent = ''; return; }
+  const rangeKey = {1440:'htl.24h', 4320:'htl.3d', 10080:'htl.7d'};
+  const displayed = rangeKey[htlDisplayedMinutes], requested = rangeKey[htlMinutes];
+  const key = htlHasData && displayed && requested && htlDisplayedMinutes !== htlMinutes
+    ? (state === 'state.updating' ? 'state.updating_range' : 'state.stale_range')
+    : htlHasData ? state : (state === 'state.updating' ? 'state.loading' : 'state.error');
+  el.textContent = t(key, displayed ? t(displayed) : '', requested ? t(requested) : '');
+}
+
+function setHealthTimelineError(){
+  if (!htlHasData) {
+    $('htl-grid').textContent = t('state.error'); $('htl-axis').textContent = '';
+    $('htl-minutes').textContent = ''; $('htl-bucket').textContent = '';
+    $('htl-stats').textContent = '';
+  }
+  setHealthTimelineState('state.stale');
+}
+
+async function loadHealthTimeline(snapshot){
+  const serial = ++htlSerial;
+  const minutes = htlMinutes;
+  setHealthTimelineState('state.updating');
+  if (!htlHasData) {
+    $('htl-grid').textContent = t('state.loading'); $('htl-axis').textContent = '';
+    $('htl-stats').textContent = ''; $('htl-minutes').textContent = ''; $('htl-bucket').textContent = '';
+  }
   try {
-    // 6 小时视图用 1 分钟粒度（格子数 360 = 60 列 × 6 行），与 24 小时视图格子一样大
-    const bucketSec = htlMinutes <= 360 ? 60 : 120;
-    const data = await fetch(`/api/health-timeline?minutes=${htlMinutes}&bucket_sec=${bucketSec}`).then(r=>r.json());
+    const bucketSec = minutes <= 1440 ? 120 : minutes <= 4320 ? 1200 : 1800;
+    const data = snapshot ?? await apiFetch(`/api/health-timeline?minutes=${minutes}&bucket_sec=${bucketSec}`).then(r=>r.json());
+    if (serial !== htlSerial) return;
     renderHealthTimeline(data);
+    htlHasData = true;
+    htlDisplayedMinutes = data.minutes ?? minutes;
+    setHealthTimelineState(null);
   } catch(e) {
+    if (serial !== htlSerial) return;
     console.error('health timeline failed', e);
+    setHealthTimelineError();
   }
 }
 
@@ -688,7 +857,7 @@ function makeSpark(canvas, color){
 }
 
 // 365 天热力图（仿 GitHub contribution graph）
-function renderHeatmap(days){
+function renderHeatmap(days, endDate){
   const el = $('heatmap');
   if (!el) return;
 
@@ -696,30 +865,32 @@ function renderHeatmap(days){
   const map = {};
   for (const d of days) map[d.date] = d.tokens || 0;
 
-  // 计算最大值用于分级
-  const values = Object.values(map).filter(v => v > 0);
+  // Date-only UTC arithmetic keeps server calendar dates independent of browser timezone.
+  const localToday = new Date();
+  const fallback = `${localToday.getFullYear()}-${String(localToday.getMonth()+1).padStart(2,'0')}-${String(localToday.getDate()).padStart(2,'0')}`;
+  const today = new Date(`${endDate || fallback}T00:00:00Z`);
+  const firstDay = new Date(today);
+  firstDay.setUTCDate(firstDay.getUTCDate() - 364);
+  const firstKey = firstDay.toISOString().slice(0,10);
+  const lastKey = today.toISOString().slice(0,10);
+  const values = Object.entries(map).filter(([date, v]) => date >= firstKey && date <= lastKey && v > 0).map(([,v]) => v);
   const max = values.length ? Math.max(...values) : 1;
-
-  // 从 365 天前到今天
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const start = new Date(today);
-  start.setDate(start.getDate() - 364);
+  const start = new Date(firstDay);
   // 对齐到周日
-  start.setDate(start.getDate() - start.getDay());
+  start.setUTCDate(start.getUTCDate() - start.getUTCDay());
 
   const cells = [];
   const cur = new Date(start);
   while (cur <= today) {
     const key = cur.toISOString().slice(0,10);
-    const v = map[key] || 0;
+    const v = cur < firstDay ? 0 : (map[key] || 0);
     let level = 0;
     if (v > 0) {
       const ratio = v / max;
       level = ratio > 0.66 ? 4 : ratio > 0.33 ? 3 : ratio > 0.1 ? 2 : 1;
     }
     cells.push({date: key, tokens: v, level});
-    cur.setDate(cur.getDate() + 1);
+    cur.setUTCDate(cur.getUTCDate() + 1);
   }
 
   // 按周分列（每列 7 天）
@@ -744,7 +915,7 @@ function renderHeatmap(days){
     html += `<div style="height:13px;font-size:9.5px;color:#8b909a;white-space:nowrap">${showLabel ? monthNames[m] : ''}</div>`;
     for (const c of week) {
       const title = `${c.date}  ${c.tokens.toLocaleString()} tokens`;
-      html += `<i class="l${c.level}" title="${title}" style="width:100%;aspect-ratio:1;border-radius:2px;display:block;background:${
+      html += `<i class="l${c.level}" title="${escapeHtml(title)}" style="width:100%;aspect-ratio:1;border-radius:2px;display:block;background:${
         [cssv('--heat-empty'),cssv('--h1'),cssv('--h2'),cssv('--h3'),cssv('--h4')][c.level]
       }"></i>`;
     }
@@ -754,19 +925,61 @@ function renderHeatmap(days){
   el.innerHTML = html;
 }
 
+let trendSerial = 0;
+let overviewTrendData = null;
+function setTrendState(state){
+  const el = $('trend-state');
+  el.style.display = state ? '' : 'none';
+  el.textContent = state ? t(state) : '';
+  el.setAttribute('aria-busy', state === 'state.loading' ? 'true' : 'false');
+  for (const id of ['chart-requests', 'chart-tokens']) $(id).style.visibility = state ? 'hidden' : '';
+  if (state) for (const id of ['requests-total', 'tokens-total']) $(id).textContent = '';
+}
 async function loadTrendCharts(){
-  const range = $('range').value;
-  const bucket = ['today','1d','7d'].includes(range) ? 'hour' : 'day';
+  const serial = ++trendSerial;
+  setTrendState('state.loading');
+  try {
+  // Model selection always redraws the snapshot currently shown in the overview.
+  const range = overviewTrendData?.range ?? $('range').value;
+  const bucket = ['today','1d','3d','7d'].includes(range) ? 'hour' : 'day';
   // 图表全局配色跟随主题（重渲染时读取当前 CSS 变量）
   Chart.defaults.color = cssv('--muted');
   Chart.defaults.borderColor = cssv('--chart-grid');
 
-  const ts = await fetch(`/api/timeseries?range=${range}&bucket=${bucket}`).then(r=>r.json());
-  const labels = ts.map(t => bucket === 'hour' ? t.bucket.slice(11) : t.bucket.slice(5));
-  const hasTrend = ts.length >= 2;
+  const ts = overviewTrendData?.range === range
+    ? overviewTrendData.timeseries
+    : await apiFetch(`/api/timeseries?range=${range}&bucket=${bucket}`).then(r=>r.json());
+  if (serial !== trendSerial) return;
+  const labelCounts = new Map();
+  for (const row of ts) labelCounts.set(row.bucket, (labelCounts.get(row.bucket) || 0) + 1);
+  const labels = ts.map(row => {
+    const label = bucket === 'hour' ? row.bucket.slice(5) : row.bucket;
+    return labelCounts.get(row.bucket) > 1 && row.bucket_offset ? `${label} ${row.bucket_offset}` : label;
+  });
+  const bucketKey = row => row.bucket_start ?? row.bucket;
+  const tooltipTitle = items => {
+    if (!items.length) return '';
+    const index = items[0].dataIndex;
+    return labels[index] + (ts[index]?.partial ? ` · ${t('trend.partial')}` : '');
+  };
+  const hasTrend = ts.length > 0;
 
-  $('trend-empty').style.display = hasTrend ? 'none' : 'block';
-  $('chart-trend').style.display = hasTrend ? 'block' : 'none';
+  for (const id of ['trend', 'cost', 'requests', 'tokens']) {
+    $(`${id}-box`).style.display = hasTrend ? '' : 'none';
+    $(`${id}-empty`).style.display = hasTrend ? 'none' : 'block';
+  }
+  $('cost-empty').setAttribute('data-i18n', 'state.empty');
+  $('cost-empty').textContent = t('state.empty');
+
+  if (!hasTrend) {
+    for (const id of ['requests-total', 'tokens-total']) $(id).textContent = '';
+    if (trendChart) { trendChart.destroy(); trendChart = null; }
+    if (costChart) { costChart.destroy(); costChart = null; }
+    if (reqChart) { reqChart.destroy(); reqChart = null; }
+    if (tokChart) { tokChart.destroy(); tokChart = null; }
+    setTrendState(null);
+    return;
+  }
 
   // 统一的时间轴配置
   const baseOpts = {
@@ -787,10 +1000,10 @@ async function loadTrendCharts(){
       data: {
         labels,
         datasets: [
-          { label: t('tok.input'), data: ts.map(t=>t.input), borderColor:'#3b82f6', backgroundColor:'#3b82f633', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
-          { label: t('tok.output'), data: ts.map(t=>t.output), borderColor:'#10b981', backgroundColor:'#10b98133', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
-          { label: t('tok.cache'), data: ts.map(t=>t.cache_read), borderColor:'#f59e0b', backgroundColor:'#f59e0b33', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
-          { label: t('tok.reasoning'), data: ts.map(t=>t.reasoning), borderColor:'#8b5cf6', backgroundColor:'#8b5cf633', fill:true, tension:.3, pointRadius:2, borderWidth:1.5 },
+          { label: t('tok.input'), data: ts.map(t=>t.input), borderColor:'#3b82f6', backgroundColor:'#3b82f633', fill:'origin', tension:0, pointRadius:2, borderWidth:1.5 },
+          { label: t('tok.output'), data: ts.map(t=>t.output), borderColor:'#10b981', backgroundColor:'#10b98133', fill:'-1', tension:0, pointRadius:2, borderWidth:1.5 },
+          { label: t('tok.cache'), data: ts.map(t=>t.cache_read), borderColor:'#f59e0b', backgroundColor:'#f59e0b33', fill:'-1', tension:0, pointRadius:2, borderWidth:1.5 },
+          { label: t('tok.cache_write'), data: ts.map(t=>t.cache_write || 0), borderColor:'#8b5cf6', backgroundColor:'#8b5cf633', fill:'-1', tension:0, pointRadius:2, borderWidth:1.5 },
         ],
       },
       options: {
@@ -799,7 +1012,8 @@ async function loadTrendCharts(){
           legend: { position:'top', labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, pointStyle:'circle' } },
           tooltip: {
             callbacks: {
-              label: c => `${c.dataset.label}: ${fmt(c.parsed.y)} tokens`,
+              title: tooltipTitle,
+              label: c => `${c.dataset.label}: ${fmtExact(c.parsed.y)} tokens`,
             },
           },
         },
@@ -814,25 +1028,43 @@ async function loadTrendCharts(){
   // ---------- 2. 成本趋势 ----------
   if (costChart) { costChart.destroy(); costChart = null; }
   if (hasTrend) {
+    const costValues = ts.map(t=>(t.unpriced_requests || 0) > 0 ? null : (t.cost || 0));
+    const activeCosts = costValues.filter((_, i) => ts[i].requests > 0);
+    const allUnpriced = activeCosts.length > 0 && activeCosts.every(value => value === null);
+    if (allUnpriced) {
+      $('cost-box').style.display = 'none';
+      $('cost-empty').style.display = 'block';
+      $('cost-empty').setAttribute('data-i18n', 'state.cost_unpriced');
+      $('cost-empty').textContent = t('state.cost_unpriced');
+    } else {
+    const maxCost = costValues.reduce((max, value) => Number.isFinite(value) ? Math.max(max, value) : max, 0);
+    const costDigits = maxCost > 0 && maxCost < 0.000001
+      ? Math.min(12, Math.max(6, Math.ceil(-Math.log10(maxCost)) + 2))
+      : maxCost < 0.001 ? 6 : maxCost < 0.01 ? 5 : maxCost < 0.1 ? 4 : 3;
+    const formatCostPoint = (value, digits) => {
+      const number = Number(value), fixed = number.toFixed(digits);
+      return '$' + (number !== 0 && Number(fixed) === 0 ? number.toExponential(2) : fixed);
+    };
     costChart = new Chart($('chart-cost'), {
       type: 'line',
       data: {
         labels,
         datasets: [{
-          label: t('tok.cost'), data: ts.map(t=>t.cost),
+          label: t('tok.cost'), data: costValues,
           borderColor: '#f59e0b', backgroundColor: '#f59e0b33',
-          fill: true, tension: .3, pointRadius: 2, borderWidth: 1.5,
+          fill: true, tension: 0, pointRadius: 2, borderWidth: 1.5,
         }],
       },
       options: {
         ...baseOpts,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: c => `$${c.parsed.y.toFixed(4)}` } },
+          tooltip: { callbacks: { title: tooltipTitle, label: c => formatCostPoint(c.parsed.y, Math.max(6, costDigits)) } },
         },
-        scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { callback: v => '$' + v.toFixed(3) } } },
+        scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { callback: v => formatCostPoint(v, costDigits) } } },
       },
     });
+    }
   }
 
   // ---------- 3/4. 请求趋势 & Token 趋势（支持按模型对比） ----------
@@ -840,43 +1072,76 @@ async function loadTrendCharts(){
 
   if (selectedModels.length === 0) {
     // 全部流量
-    reqSeries = [{ label: 'All', data: ts.map(t=>t.requests), color: '#6b7280' }];
-    tokSeries = [{ label: 'All', data: ts.map(t=>t.input+t.output+t.cache_read), color: '#6b7280' }];
+    reqSeries = [{ label: t('trend.all'), data: ts.map(t=>t.requests), color: '#6b7280' }];
+    tokSeries = [{ label: t('trend.all'), data: ts.map(t=>t.input+t.output+t.cache_read+(t.cache_write||0)), color: '#6b7280' }];
   } else {
     // 按模型拆分
-    const perModel = await Promise.all(selectedModels.map(async (key, i) => {
-      const [source, ...rest] = key.split('/');
-      const model = rest.join('/');
-      const data = await fetch(
-        `/api/timeseries?range=${range}&bucket=${bucket}&source=${encodeURIComponent(source)}&model=${encodeURIComponent(model)}`
-      ).then(r=>r.json());
-      const map = {};
-      for (const d of data) map[d.bucket] = d;
+    const modelSnapshot = overviewTrendData?.range === range ? overviewTrendData.modelTimeseries : null;
+    const snapshotMap = new Map();
+    if (Array.isArray(modelSnapshot)) {
+      for (const row of modelSnapshot) {
+        const key = modelKey(row);
+        if (!snapshotMap.has(key)) snapshotMap.set(key, new Map());
+        snapshotMap.get(key).set(bucketKey(row), row);
+      }
+    }
+    const perModel = await Promise.all(selectedModels.map(async key => {
+      const selected = activeModels.find(m => modelKey(m) === key);
+      if (!selected) throw new Error('Selected model is unavailable');
+      let map = snapshotMap.get(key) || new Map();
+      if (!Array.isArray(modelSnapshot)) {
+        if (!selected.source || !selected.model) {
+          const error = new Error('Cannot filter missing source or model on older backend');
+          error.unsupportedModelFilter = true;
+          throw error;
+        }
+        const data = await apiFetch(
+          `/api/timeseries?range=${range}&bucket=${bucket}&source=${encodeURIComponent(selected.source)}&model=${encodeURIComponent(selected.model)}`
+        ).then(r=>r.json());
+        map = new Map(data.map(d => [bucketKey(d), {...d, tokens: d.input + d.output + d.cache_read + (d.cache_write || 0)}]));
+      }
       return {
-        key, color: MODEL_COLORS[activeModels.findIndex(m => modelKey(m) === key) % MODEL_COLORS.length],
-        req: ts.map(t => (map[t.bucket]?.requests) || 0),
-        tok: ts.map(t => { const d = map[t.bucket]; return d ? d.input + d.output + d.cache_read : 0; }),
+        label: modelLabel(selected), color: MODEL_COLORS[activeModels.indexOf(selected) % MODEL_COLORS.length],
+        req: ts.map(t => map.get(bucketKey(t))?.requests || 0),
+        tok: ts.map(t => map.get(bucketKey(t))?.tokens || 0),
       };
     }));
-    reqSeries = perModel.map(p => ({ label: p.key.split('/').slice(1).join('/'), data: p.req, color: p.color }));
-    tokSeries = perModel.map(p => ({ label: p.key.split('/').slice(1).join('/'), data: p.tok, color: p.color }));
+    if (serial !== trendSerial) return;
+    reqSeries = perModel.map(p => ({ label: p.label, data: p.req, color: p.color }));
+    tokSeries = perModel.map(p => ({ label: p.label, data: p.tok, color: p.color }));
   }
 
   if (reqChart) { reqChart.destroy(); reqChart = null; }
   if (tokChart) { tokChart.destroy(); tokChart = null; }
+
+  const totalKey = selectedModels.length ? 'trend.selected_total' : 'trend.all_total';
+  const seriesTotal = series => series.reduce((sum, line) => sum + line.data.reduce((n, value) => n + value, 0), 0);
+  $('requests-total').textContent = t(totalKey, fmtExact(seriesTotal(reqSeries)));
+  $('tokens-total').textContent = t(totalKey, fmtExact(seriesTotal(tokSeries)));
+
+  const legendKeys = selectedModels.slice();
+  const removeLegendSeries = (_event, item) => {
+    const key = legendKeys[item.datasetIndex];
+    const index = selectedModels.indexOf(key);
+    if (index < 0) return;
+    selectedModels.splice(index, 1);
+    renderLinePicker();
+    return loadTrendCharts();
+  };
 
   if (hasTrend) {
     reqChart = new Chart($('chart-requests'), {
       type: 'line',
       data: { labels, datasets: reqSeries.map(s => ({
         label: s.label, data: s.data, borderColor: s.color,
-        backgroundColor: s.color + '22', fill: true, tension: .3, pointRadius: 2, borderWidth: 1.5,
+        backgroundColor: s.color + '22', fill: reqSeries.length === 1, tension: 0, pointRadius: 2, borderWidth: 1.5,
       })) },
       options: {
         ...baseOpts,
         plugins: {
-          legend: { display: reqSeries.length > 1, position:'top',
+          legend: { display: reqSeries.length > 1, position:'top', onClick: removeLegendSeries,
             labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, pointStyle:'circle', font:{size:10} } },
+          tooltip: { callbacks: { title: tooltipTitle, label: c => `${c.dataset.label}: ${fmtExact(c.parsed.y)}` } },
         },
       },
     });
@@ -885,46 +1150,122 @@ async function loadTrendCharts(){
       type: 'line',
       data: { labels, datasets: tokSeries.map(s => ({
         label: s.label, data: s.data, borderColor: s.color,
-        backgroundColor: s.color + '22', fill: true, tension: .3, pointRadius: 2, borderWidth: 1.5,
+        backgroundColor: s.color + '22', fill: tokSeries.length === 1, tension: 0, pointRadius: 2, borderWidth: 1.5,
       })) },
       options: {
         ...baseOpts,
         plugins: {
-          legend: { display: tokSeries.length > 1, position:'top',
+          legend: { display: tokSeries.length > 1, position:'top', onClick: removeLegendSeries,
             labels:{ boxWidth:8, boxHeight:8, usePointStyle:true, pointStyle:'circle', font:{size:10} } },
-          tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.y)}` } },
+          tooltip: { callbacks: { title: tooltipTitle, label: c => `${c.dataset.label}: ${fmtExact(c.parsed.y)}` } },
         },
         scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { callback: v => fmt(v) } } },
       },
     });
   }
+  if (serial === trendSerial) setTrendState(null);
+  } catch(e) {
+    if (serial !== trendSerial) return;
+    console.error('trend charts failed', e);
+    if (reqChart) { reqChart.destroy(); reqChart = null; }
+    if (tokChart) { tokChart.destroy(); tokChart = null; }
+    setTrendState(e.unsupportedModelFilter ? 'state.model_filter_unsupported' : 'state.error');
+  }
 }
 
-async function load(){
-  const range = $('range').value;
-  try{
-    // 顶部迷你图与主趋势图用同一粒度
-    const sparkBucket = ['today','1d','7d'].includes(range) ? 'hour' : 'day';
-    const [sum, ts, byModel, quota, costs, routes, health, traces, speed, alerts] = await Promise.all([
-      fetch(`/api/summary?range=${range}`).then(r=>r.json()),
-      fetch(`/api/timeseries?range=${range}&bucket=${sparkBucket}`).then(r=>r.json()),
-      fetch(`/api/usage?range=${range}&group_by=model`).then(r=>r.json()),
-      fetch(`/api/quota`).then(r=>r.json()),
-      fetch(`/api/costs?range=${range}`).then(r=>r.json()),
-      fetch(`/api/routes`).then(r=>r.json()),
-      fetch(`/api/upstreams/health`).then(r=>r.json()).catch(()=>[]),
-      fetch(`/api/traces?limit=20`).then(r=>r.json()).catch(()=>[]),
-      fetch(`/api/speed?limit=20`).then(r=>r.json()).catch(()=>({history:[]})),
-      fetch(`/api/alerts`).then(r=>r.json()).catch(()=>({enabled:false,items:[]})),
+let overviewSerial = 0;
+let overviewHasData = false;
+let overviewController = null;
+let cancelOverviewAuxiliary = null;
+function overviewStatus(key){
+  const displayed = overviewTrendData?.range;
+  const requested = $('range').value;
+  return displayed && displayed !== requested
+    ? t(key === 'state.updating' ? 'state.updating_range' : 'state.stale_range',
+        t(`range.${displayed}`), t(`range.${requested}`))
+    : t(key);
+}
+async function fetchOverviewUsage(range, options = {}){
+  try {
+    return await apiFetch(`/api/overview-usage?range=${range}`, options).then(r=>r.json());
+  } catch (error) {
+    if (error.status !== 404) throw error;
+    const bucket = ['today','1d','3d','7d'].includes(range) ? 'hour' : 'day';
+    const [summary, timeseries, models, active_models, costs] = await Promise.all([
+      apiFetch(`/api/summary?range=${range}`, options).then(r=>r.json()),
+      apiFetch(`/api/timeseries?range=${range}&bucket=${bucket}`, options).then(r=>r.json()),
+      apiFetch(`/api/usage?range=${range}&group_by=model`, options).then(r=>r.json()),
+      apiFetch(`/api/models/active?range=${range}`, options).then(r=>r.json()),
+      apiFetch(`/api/costs?range=${range}`, options).then(r=>r.json()),
     ]);
+    return {summary, timeseries, models, active_models, costs};
+  }
+}
+async function loadOverviewTrends(range, overviewVersion, snapshotModels){
+  const trendVersion = ++trendSerial;
+  setTrendState('state.loading');
+  try {
+    const models = snapshotModels ?? await apiFetch(`/api/models/active?range=${range}`).then(r=>r.json());
+    if (overviewVersion !== overviewSerial || trendVersion !== trendSerial) return;
+    activeModels = models;
+    const valid = new Set(activeModels.map(modelKey));
+    selectedModels = selectedModels.filter(k => valid.has(k));
+    renderLinePicker();
+    await loadTrendCharts();
+  } catch(e) {
+    if (overviewVersion !== overviewSerial || trendVersion !== trendSerial) return;
+    console.error('trend charts failed', e);
+    setTrendState('state.error');
+  }
+}
+async function load(){
+  if (cancelOverviewAuxiliary) cancelOverviewAuxiliary();
+  const serial = ++overviewSerial;
+  if (overviewController) overviewController.abort();
+  const trendVersion = ++trendSerial, timelineVersion = ++htlSerial;
+  setHealthTimelineState('state.updating');
+  if (!overviewHasData) {
+    $('overview-state').textContent = t('state.loading');
+    $('overview-state').style.display = '';
+    $('overview-content').style.display = 'none';
+  } else {
+    $('overview-state').textContent = overviewStatus('state.updating');
+    $('overview-state').style.display = '';
+  }
+  const range = $('range').value;
+  const controller = new AbortController();
+  overviewController = controller;
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  const options = {signal: controller.signal};
+  try{
+    const usageRequest = fetchOverviewUsage(range, options);
+    const auxiliaryRequest = url => apiFetch(url, options).then(r=>r.json()).catch(()=>null);
+    const quotaRequest = auxiliaryRequest('/api/quota');
+    const routesRequest = auxiliaryRequest('/api/routes');
+    const healthRequest = auxiliaryRequest('/api/upstreams/health');
+    const tracesRequest = auxiliaryRequest('/api/traces?limit=20');
+    const speedRequest = auxiliaryRequest('/api/speed?limit=20');
+    const alertsRequest = auxiliaryRequest('/api/alerts');
+    const usage = await usageRequest;
 
+    if (serial !== overviewSerial) return;
+    const {summary: sum, timeseries: ts, models: byModel, costs} = usage;
+    overviewTrendData = {range, timeseries: ts, modelTimeseries: usage.model_timeseries};
+    $('overview-state').style.display = 'none';
+    $('overview-content').style.display = '';
     $('status').textContent = t('st.connected');
     $('updated').textContent = new Date().toLocaleTimeString('zh-CN');
 
-    $('v-requests').textContent = fmt(sum.total_requests);
+    $('v-requests').textContent = fmtExact(sum.total_requests);
     $('v-requests-sub').textContent =
-      `${t('w.success')} ${fmt(sum.total_requests - sum.failed_requests)} · ${t('w.failed')} ${sum.failed_requests} · ${t('w.sr')} ${sum.success_rate}%`;
-    $('v-tokens').textContent = fmt(sum.total_tokens);
+      `${t('w.success')} ${fmtExact(sum.successful_requests ?? (sum.total_requests - sum.failed_requests))} · ${t('w.failed')} ${fmtExact(sum.failed_requests)}` +
+      (sum.gateway_entry_failures ? ` · ${t('w.gateway_entry_failures')} ${fmtExact(sum.gateway_entry_failures)}` : '') +
+      (sum.failed_unbilled_requests ? ` · ${t('w.failed_unbilled')} ${fmtExact(sum.failed_unbilled_requests)}` : '') +
+      (sum.cancelled_requests ? ` · ${t('l.cancelled')} ${fmtExact(sum.cancelled_requests)}` : '') +
+      (sum.unknown_requests ? ` · ${t('status.unknown')} ${fmtExact(sum.unknown_requests)}` : '') +
+      ` · ${t('w.sr')} ${sum.success_rate == null ? '—' : sum.success_rate + '%'}`;
+    $('v-requests-sub').title = t('w.rate_tip');
+    $('v-tokens').textContent = fmtExact(sum.total_tokens);
     const cache = sum.by_source.reduce((a,s)=>a+(s.cache_read||0),0);
     const reason = sum.by_source.reduce((a,s)=>a+(s.reasoning||0),0);
     $('v-tokens-sub').textContent = `${t('w.cache')} ${fmt(cache)} · ${t('w.reasoning')} ${fmt(reason)}`;
@@ -942,23 +1283,26 @@ async function load(){
 
     // 总成本（原价）+ 平均单价
     const totalCost = sum.total_cost_usd || 0;
+    const unpriced = sum.unpriced_requests || 0;
+    const noPrice = unpriced > 0 && (sum.priced_requests || 0) === 0;
     const monthly = sum.monthly_fee_usd || 0;
-    $('v-cost').textContent = '$' + totalCost.toFixed(4);
+    $('v-cost').textContent = noPrice ? '—' : totalCost === 0 ? fmtCost(0) : totalCost > 0 && totalCost < 0.000001
+      ? fmtCost(totalCost) : '$' + totalCost.toFixed(totalCost > 0 && totalCost < 0.0001 ? 6 : 4);
     $('v-cost-sub').textContent = sum.total_requests
-      ? `${fmt(sum.total_requests)} ${t('w.requests')} · ${t('w.official')}`
-      : t('w.official');
+      ? `${fmtExact(sum.total_requests)} ${t('w.requests')} · ${t('w.recorded')}${unpriced && !noPrice ? ' · ' + t('w.partial') : ''}`
+      : t('w.recorded');
 
     // 平均每百万 token 多少钱
     const mTokens = (sum.total_tokens || 0) / 1e6;
-    if (mTokens > 0) {
-      $('v-unit').textContent = '$' + (totalCost / mTokens).toFixed(2);
+    if (mTokens > 0 && !unpriced && !noPrice) {
+      const unit = totalCost / mTokens;
+      $('v-unit').textContent = unit > 0 && unit < 0.005 ? fmtCost(unit) : '$' + unit.toFixed(2);
       $('v-unit-sub').textContent = t('c.unit_tokens', fmt(sum.total_tokens));
     } else {
-      $('v-unit').textContent = '$0';
-      $('v-unit-sub').textContent = t('w.nodata');
+      $('v-unit').textContent = '—';
+      $('v-unit-sub').textContent = unpriced || noPrice ? t('w.price_incomplete') : t('w.nodata');
     }
 
-    const unpriced = sum.unpriced_requests || 0;
     if (unpriced > 0) {
       $('v-cost-sub').textContent += ` · ${unpriced} ${t('w.unpriced')}`;
     }
@@ -970,73 +1314,120 @@ async function load(){
     const modeLabel = { payg: t('mode.payg'), subscription: t('mode.subscription'), free: t('mode.free') };
     const modeColor = { payg: '#10b981', subscription: '#8b5cf6', free: '#8b909a' };
     $('tb-source').innerHTML = sum.by_source.length ? sum.by_source.map(s=>{
-      const tk = (s.input||0)+(s.output||0)+(s.cache_read||0);
+      const tk = (s.input||0)+(s.output||0)+(s.cache_read||0)+(s.cache_write||0);
       const perM = tk > 0 ? (s.cost_usd||0) / (tk/1e6) : 0;
+      const billable = s.billable_requests ?? s.priced_requests ?? 0;
+      const missing = (s.unpriced_requests || 0) > 0;
+      const sourceCost = billable === 0 ? fmtCost(0)
+        : (s.priced_requests || 0) === 0 ? `—${missing ? ' *' : ''}`
+        : `${fmtCost(s.cost_usd) ?? '—'}${missing ? ' *' : ''}`;
       const tps = s.tok_per_sec || 0;
-      return `<tr><td><span class="tag">${s.source}</span></td>
-      <td><span style="font-size:11.5px;color:${modeColor[s.billing_mode]||'#8b909a'}">${modeLabel[s.billing_mode]||s.billing_mode}</span></td>
-      <td class="num">${fmt(s.requests)}</td>
-      <td class="num">${fmt(s.input)}</td>
-      <td class="num">${fmt(s.output)}</td>
-      <td class="num">${fmt(s.cache_read)}</td>
+      return `<tr><td><span class="tag">${escapeHtml(s.source)}</span></td>
+      <td><span style="font-size:11.5px;color:${Object.hasOwn(modeColor, s.billing_mode) ? modeColor[s.billing_mode] : '#8b909a'}">${escapeHtml(Object.hasOwn(modeLabel, s.billing_mode) ? modeLabel[s.billing_mode] : s.billing_mode)}</span></td>
+      <td class="num">${fmtExact(s.requests)}</td>
+      <td class="num">${fmtExact(s.input)}</td>
+      <td class="num">${fmtExact(s.output)}</td>
+      <td class="num">${fmtExact((s.cache_read||0)+(s.cache_write||0))}</td>
       <td class="num" style="color:#10b981;font-weight:600">${tps > 0 ? tps.toFixed(1) : '—'}</td>
-      <td class="num" style="font-weight:600">$${(s.cost_usd||0).toFixed(4)}</td>
-      <td class="num" style="color:#8b909a">$${perM.toFixed(2)}</td></tr>`;
+      <td class="num" style="font-weight:600" title="${t('w.recorded_tip')}">${sourceCost}</td>
+      <td class="num" style="color:#8b909a">${missing || !tk ? '—' : perM > 0 && perM < 0.005 ? fmtCost(perM) : '$' + perM.toFixed(2)}</td></tr>`;
     }).join('')
       : '<tr><td colspan="9" class="empty">' + t('w.nodata') + '</td></tr>';
 
     // 成本明细
-    $('tb-cost').innerHTML = costs.length ? costs.slice(0,15).map(c=>`
-      <tr><td><span class="tag">${c.source}</span></td>
-      <td>${c.model||'—'}</td>
-      <td class="num">${fmt(c.requests)}</td>
-      <td class="num">${fmt(c.input)}</td>
-      <td class="num">${fmt(c.output)}</td>
-      <td class="num">${c.cost > 0 ? '$'+c.cost.toFixed(5) : '<span style="color:#8b909a">—</span>'}</td>
-      <td class="num">${c.cost > 0 ? '$'+c.avg_cost_per_request.toFixed(6) : '—'}</td></tr>`).join('')
+    $('tb-cost').innerHTML = costs.length ? costs.slice(0,15).map(c=>{
+      const billable = c.billable_requests ?? c.priced ?? 0;
+      const unpriced = c.unpriced_requests || 0;
+      const cost = billable === 0 ? fmtCost(0)
+        : (c.priced || 0) === 0 ? `—${unpriced ? ' *' : ''}`
+        : `${fmtCost(c.cost) ?? '—'}${unpriced ? ' *' : ''}`;
+      return `<tr><td><span class="tag">${escapeHtml(c.source)}</span></td>
+      <td>${escapeHtml(c.model||'—')}</td>
+      <td class="num">${fmtExact(c.requests)}</td>
+      <td class="num">${fmtExact(c.input)}</td>
+      <td class="num">${fmtExact(c.output)}</td>
+      <td class="num" title="${t('w.recorded_tip')}">${cost}</td>
+      <td class="num">${billable > 0 && unpriced === 0 ? fmtCost6(c.avg_cost_per_request) : '—'}</td></tr>`;
+    }).join('')
       : '<tr><td colspan="7" class="empty">' + t('w.nodata') + '</td></tr>';
 
-    $('tb-model').innerHTML = byModel.length ? byModel.slice(0,12).map(m=>`
-      <tr><td>${m.grp}</td>
-      <td class="num">${fmt(m.requests)}</td>
-      <td class="num">${fmt(m.input)}</td>
-      <td class="num">${fmt(m.output)}</td>
-      <td class="num">${fmt(m.reasoning)}</td></tr>`).join('')
-      : '<tr><td colspan="5" class="empty">' + t('w.nodata') + '</td></tr>';
+    const expandedModels = new Set([...$('tb-model').querySelectorAll('details.model-sources[open]')].map(el => el.dataset.model));
+    $('tb-model').innerHTML = byModel.length ? byModel.map(m=>`
+      <tr><td>${escapeHtml(m.grp)}${modelSourcesMarkup(m, usage.active_models, expandedModels.has(String(m.grp)))}</td>
+      <td class="num">${fmtExact(m.requests)}</td>
+      <td class="num">${fmtExact(m.input)}</td>
+      <td class="num">${fmtExact((m.cache_read||0)+(m.cache_write||0))}</td>
+      <td class="num">${fmtExact(m.output)}</td>
+      <td class="num">${fmtExact(m.tokens)}</td>
+      <td class="num">${fmtExact(m.reasoning)}</td></tr>`).join('')
+      : '<tr><td colspan="7" class="empty">' + t('w.nodata') + '</td></tr>';
 
-    $('tb-key').innerHTML = sum.by_client_key.length ? sum.by_client_key.map(k=>`
-      <tr><td><span class="tag">${k.client_key}</span></td>
-      <td class="num">${fmt(k.requests)}</td>
-      <td class="num">${fmt(k.tokens)}</td>
-      <td class="num">$${(k.cost||0).toFixed(4)}</td></tr>`).join('')
+    $('tb-key').innerHTML = sum.by_client_key.length ? sum.by_client_key.map(k=>{
+      const billable = k.billable_requests ?? k.priced_requests ?? 0;
+      const unpriced = k.unpriced_requests || 0;
+      const cost = billable === 0 ? fmtCost(0)
+        : (k.priced_requests || 0) === 0 ? `—${unpriced ? ' *' : ''}`
+        : `${fmtCost(k.cost) ?? '—'}${unpriced ? ' *' : ''}`;
+      return `<tr><td><span class="tag">${escapeHtml(k.is_collector ? t('key.collector') : k.is_collector === 0 ? t('key.named', k.client_key) : k.client_key)}</span></td>
+      <td class="num">${fmtExact(k.requests)}</td>
+      <td class="num">${fmtExact(k.tokens)}</td>
+      <td class="num" title="${t('w.recorded_tip')}">${cost}</td></tr>`;
+    }).join('')
       : '<tr><td colspan="4" class="empty">' + t('w.nodata') + '</td></tr>';
 
+    for (const [id, columns] of [['tb-health',7], ['tb-speed',8], ['tb-traces',6], ['tb-routes',4]]) {
+      $(id).innerHTML = `<tr><td colspan="${columns}" class="empty">${t('state.loading')}</td></tr>`;
+    }
+    $('speed-avg').textContent = t('state.loading');
+    $('quota-groups').innerHTML = `<div class="empty">${t('state.loading')}</div>`;
+    const alertbar = $('alertbar');
+    if (alertbar) {
+      alertbar.classList.add('show');
+      $('alertbar-state').textContent = t('state.loading');
+    }
+    const pendingAuxiliary = new Set();
+    const renderAuxiliary = (request, render) => {
+      const finish = (data, cancelled = false) => {
+        if (!pendingAuxiliary.delete(finish) || (!cancelled && serial !== overviewSerial)) return;
+        try { render(data); }
+        catch (error) {
+          console.error(error);
+          render(null);
+        }
+      };
+      pendingAuxiliary.add(finish);
+      return request.then(finish);
+    };
+
     // 上游健康状态
-    $('tb-health').innerHTML = (health || []).map(h => {
+    const healthRender = renderAuxiliary(healthRequest, health => {
+    $('tb-health').innerHTML = health === null ? `<tr><td colspan="7" class="empty">${t('state.error')}</td></tr>` : (health || []).map(h => {
       const ok = !h.in_cooldown;
       const dot = ok
         ? `<span style="color:#10b981">${t('h.ok')}</span>`
-        : `<span style="color:#ef4444">${t('h.cooldown')} ${h.cooldown_remaining_sec}s</span>`;
+        : `<span style="color:#ef4444">${t('h.cooldown')} ${escapeHtml(h.cooldown_remaining_sec)}s</span>`;
       const rate = h.success_rate;
       const rateColor = rate >= 99 ? '#10b981' : rate >= 90 ? '#f59e0b' : '#ef4444';
       const err = h.last_error
-        ? `<span style="color:#8b909a;font-size:11.5px">${h.last_error.slice(0, 60)}</span>`
+        ? `<span style="color:#8b909a;font-size:11.5px">${escapeHtml(h.last_error.slice(0, 60))}</span>`
         : '—';
-      return `<tr><td><span class="tag">${h.alias || h.name}</span></td>
-        <td style="font-size:12px;color:#8b909a">${h.name}</td>
+      return `<tr><td><span class="tag">${escapeHtml(h.alias || h.name)}</span></td>
+        <td style="font-size:12px;color:#8b909a">${escapeHtml(h.name)}</td>
         <td>${dot}</td>
-        <td class="num">${h.total_requests || 0}</td>
-        <td class="num" style="color:${rateColor};font-weight:600">${rate}%</td>
+        <td class="num">${escapeHtml(h.total_requests || 0)}</td>
+        <td class="num" style="color:${rateColor};font-weight:600">${escapeHtml(rate)}%</td>
         <td class="num">${h.last_latency_ms ? h.last_latency_ms.toFixed(0) + 'ms' : '—'}</td>
         <td>${err}</td></tr>`;
     }).join('') || '<tr><td colspan="7" class="empty">' + t('w.nodata') + '</td></tr>';
 
+    });
     // 生成速度
+    const speedRender = renderAuxiliary(speedRequest, speed => {
     const spd = (speed && speed.history) || [];
-    $('speed-avg').textContent = spd.length
+    $('speed-avg').textContent = speed === null ? t('state.error') : spd.length
       ? t('w.speed_avg', spd.length, (speed.recent_tok_per_sec || 0).toFixed(1))
       : t('w.nodata');
-    $('tb-speed').innerHTML = spd.length ? spd.map(x => {
+    $('tb-speed').innerHTML = speed === null ? `<tr><td colspan="8" class="empty">${t('state.error')}</td></tr>` : spd.length ? spd.map(x => {
       const time = new Date(x.ts * 1000).toLocaleTimeString('zh-CN');
       const total = x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1) + 's' : Math.round(x.latency_ms) + 'ms';
       const ttft = x.ttft_ms != null ? Math.round(x.ttft_ms) + 'ms' : '—';
@@ -1044,8 +1435,8 @@ async function load(){
       const gtps = x.gen_tok_per_sec || 0;
       const color = tps >= 40 ? '#10b981' : tps >= 15 ? '#f59e0b' : '#ef4444';
       return `<tr><td style="font-size:12px;color:#8b909a">${time}</td>
-        <td><span class="tag">${x.source}</span></td>
-        <td style="font-size:12px">${x.model}</td>
+        <td><span class="tag">${escapeHtml(x.source)}</span></td>
+        <td style="font-size:12px">${escapeHtml(x.model)}</td>
         <td class="num">${fmt(x.output_tokens)}</td>
         <td class="num">${total}</td>
         <td class="num" style="color:#8b909a">${ttft}</td>
@@ -1053,8 +1444,11 @@ async function load(){
         <td class="num" style="color:#8b909a">${gtps.toFixed(1)}</td></tr>`;
     }).join('') : '<tr><td colspan="8" class="empty">' + t('w.nodata') + '</td></tr>';
 
+    });
     // 链路追踪
-    $('tb-traces').innerHTML = (traces || []).map(t => {
+    const tracesRender = renderAuxiliary(tracesRequest, traces => {
+    const traceFailedLabel = t('w.failed');
+    $('tb-traces').innerHTML = traces === null ? `<tr><td colspan="6" class="empty">${t('state.error')}</td></tr>` : (traces || []).map(t => {
       const time = new Date(t.ts * 1000).toLocaleTimeString('zh-CN');
       const statusColor = t.status < 400 ? '#10b981' : '#ef4444';
       // 把 spans 压成一行：upstream=3181ms parse=13ms
@@ -1062,30 +1456,35 @@ async function load(){
         .filter(s => s.duration_ms != null && s.name !== 'receive' && s.name !== 'route')
         .map(s => {
           const w = Math.min(100, Math.max(1, s.duration_ms / Math.max(1, t.total_ms) * 100));
-          const color = s.error ? '#ef4444' : s.name === 'upstream' ? '#3b82f6' : '#8b5cf6';
-          return `<span title="${s.name}: ${s.duration_ms}ms${s.error ? '\n' + s.error : ''}"
+          const failed = s.has_error === true || !!s.error;
+          const color = failed ? '#ef4444' : s.name === 'upstream' ? '#3b82f6' : '#8b5cf6';
+          return `<span title="${escapeHtml(`${s.name}: ${s.duration_ms}ms${failed ? '\n' + traceFailedLabel : ''}`)}"
                     style="display:inline-block;width:${w}px;height:6px;background:${color};border-radius:2px;margin-right:1px;vertical-align:middle"></span>`;
         }).join('');
       return `<tr><td style="font-size:12px;color:#8b909a">${time}</td>
-        <td><span class="tag">${t.source || '—'}</span></td>
-        <td style="font-size:12px">${t.model || '—'}</td>
-        <td class="num" style="color:${statusColor};font-weight:600">${t.status}</td>
+        <td><span class="tag">${escapeHtml(t.source || '—')}</span></td>
+        <td style="font-size:12px">${escapeHtml(t.model || '—')}</td>
+        <td class="num" style="color:${statusColor};font-weight:600">${escapeHtml(t.status)}</td>
         <td class="num">${t.total_ms != null ? t.total_ms.toFixed(0) + 'ms' : '—'}</td>
         <td>${chain}</td></tr>`;
     }).join('') || `<tr><td colspan="6" class="empty">${t('w.notrace')}</td></tr>`;
 
+    });
     // 模型路由表
-    $('tb-routes').innerHTML = routes.map(r => {
+    const routesRender = renderAuxiliary(routesRequest, routes => {
+    $('tb-routes').innerHTML = routes === null ? `<tr><td colspan="4" class="empty">${t('state.error')}</td></tr>` : routes.map(r => {
       const sample = r.models && r.models.length ? `${r.alias}/${r.models[0]}` : '—';
-      return `<tr><td><span class="tag">${r.alias}</span></td>
-        <td>${r.name}</td>
+      return `<tr><td><span class="tag">${escapeHtml(r.alias)}</span></td>
+        <td>${escapeHtml(r.name)}</td>
         <td class="num">${r.models ? r.models.length : 0}</td>
-        <td style="color:#8b909a;font-size:12px">${sample}</td></tr>`;
+        <td style="color:#8b909a;font-size:12px">${escapeHtml(sample)}</td></tr>`;
     }).join('') || `<tr><td colspan="4" class="empty">${t('w.noroutes')}</td></tr>`;
 
+    });
     // 额度：按来源分组，每组一张卡片
-    const groups = {};
-    for (const q of quota) {
+    const quotaRender = renderAuxiliary(quotaRequest, quota => {
+    const groups = Object.create(null);
+    for (const q of quota || []) {
       (groups[q.source] = groups[q.source] || []).push(q);
     }
     const srcLabel = {
@@ -1106,12 +1505,12 @@ async function load(){
       if (!main.length) continue;
 
       // 按账号分组
-      const byAccount = {};
+      const byAccount = Object.create(null);
       for (const i of main) (byAccount[i.account||'—'] = byAccount[i.account||'—'] || []).push(i);
 
-      quotaHtml += `<div class="quota-card"><div class="quota-title">${srcLabel[src]||src}</div>`;
+      quotaHtml += `<div class="quota-card"><div class="quota-title">${escapeHtml(Object.hasOwn(srcLabel, src) ? srcLabel[src] : src)}</div>`;
       for (const [acct, wins] of Object.entries(byAccount)) {
-        quotaHtml += `<div class="quota-acct">${acct}</div>
+        quotaHtml += `<div class="quota-acct">${escapeHtml(acct)}</div>
           <table class="qtable qfix"><colgroup>
             <col style="width:36%"><col style="width:33%"><col style="width:14%"><col style="width:17%">
           </colgroup><thead><tr><th>${t('q.window')}</th><th>${t('q.remaining')}</th><th class="num">${t('q.value')}</th><th>${t('q.reset')}</th></tr></thead><tbody>`;
@@ -1120,82 +1519,109 @@ async function load(){
           (String(a.window || '').includes('Argon') ? 0 : 1) -
           (String(b.window || '').includes('Argon') ? 0 : 1));
         for (const w of sortedWins) {
-          const pct = w.remaining_pct;
-          const lvl = w.level || 'ok';
-          const color = pct==null ? '#8b909a' : pct<20 ? '#ef4444' : pct<50 ? '#f59e0b' : '#10b981';
+          const pct = finiteNumber(w.remaining_pct, 0, 100);
+          const amount = finiteNumber(w.remaining_amt);
+          const reset = finiteNumber(w.resets_at, 0, 8640000000000);
+          const burnRate = finiteNumber(w.burn_per_hour, 0, 1000000);
+          const hoursLeft = finiteNumber(w.hours_left, 0, 1000000);
+          const daysLeft = finiteNumber(w.days_left, 0, 1000000);
+          const projected = finiteNumber(w.projected_pct, 0, 100);
+          const sampleCount = finiteNumber(w.sample_count, 0, 1000000000);
+          const sampleSpan = finiteNumber(w.sample_span_hours, 0, 1000000);
+          const lvl = w.level || 'unknown';
+          const color = w.stale || pct==null ? '#8b909a' : pct<20 ? '#ef4444' : pct<50 ? '#f59e0b' : '#10b981';
           const bar = pct!=null ? `<div style="background:var(--heat-empty);border-radius:3px;height:5px;overflow:hidden">
               <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div></div>` : '—';
           // 燃烧率挂在进度条下方（剩余列最宽），文案紧凑不外溢。
           // 有重置时间时展示「重置前预计剩 x%」：百分比不能直接折算天数，
           // 5h 窗口剩 99% 不代表还能用 97 天，它 4 小时后就重置了。
           let burn = '';
-          if (w.burn_per_hour != null) {
+          if (burnRate != null) {
             const winName = String(w.window || '');
             const shortWin = /\d+h\b/i.test(winName) && !/week|month/i.test(winName);
             const rate = shortWin
-              ? `↓${(+w.burn_per_hour).toFixed(2)}%/${t('q.per_hour')}`
-              : `↓${(w.burn_per_hour * 24).toFixed(1)}%/${t('q.per_day')}`;
-            if (w.exhaust_before_reset && w.hours_left != null) {
-              const dur = w.hours_left >= 48
-                ? `${Math.max(1, Math.round(w.hours_left / 24))}${t('q.days')}`
-                : `${Math.max(1, Math.round(w.hours_left))}${t('q.hours')}`;
+              ? `↓${burnRate.toFixed(2)}%/${t('q.per_hour')}`
+              : `↓${(burnRate * 24).toFixed(1)}%/${t('q.per_day')}`;
+            if (w.exhaust_before_reset && hoursLeft != null) {
+              const dur = hoursLeft >= 48
+                ? `${Math.max(1, Math.round(hoursLeft / 24))}${t('q.days')}`
+                : `${Math.max(1, Math.round(hoursLeft))}${t('q.hours')}`;
               burn = `<div class="cellsub" style="color:#ef4444">${rate} · ${t('q.exhaust_in')} ${dur}</div>`;
-            } else if (w.projected_pct != null) {
-              burn = `<div class="cellsub">${rate} · ${t('q.at_reset')} ${(+w.projected_pct).toFixed(1)}%</div>`;
-            } else if (w.days_left != null) {
-              burn = `<div class="cellsub">${rate} · ${t('q.left')} ${Math.max(1, Math.round(w.days_left))}${t('q.days')}</div>`;
+            } else if (projected != null) {
+              burn = `<div class="cellsub">${rate} · ${t('q.at_reset')} ${projected.toFixed(1)}%</div>`;
+            } else if (daysLeft != null) {
+              burn = `<div class="cellsub">${rate} · ${t('q.left')} ${Math.max(1, Math.round(daysLeft))}${t('q.days')}</div>`;
             } else {
               burn = `<div class="cellsub">${rate}</div>`;
             }
           }
           const val = pct!=null ? pct.toFixed(1)+'%'
-            : (w.remaining_amt!=null ? (w.currency||'')+' '+w.remaining_amt.toFixed(2) : '—');
+            : (amount != null ? escapeHtml(w.currency || '') + ' ' + amount.toFixed(2) : '—');
+          if (burn) {
+            const sampleTip = t('q.sample_tip', sampleCount ?? '—', sampleSpan ?? '—');
+            burn = `<div title="${escapeHtml(sampleTip)}">${burn}</div>`;
+          }
           const rowCls = lvl==='critical' ? 'lvl-critical' : lvl==='warn' ? 'lvl-warn' : '';
-          const badge = lvl==='critical' ? ` <span style="color:#ef4444;font-size:10.5px">${t('q.critical')}</span>`
+          const badge = w.stale ? ` <span style="color:var(--muted);font-size:10.5px">${t('q.stale')}</span>`
+            : lvl==='unknown' ? ` <span style="color:var(--muted);font-size:10.5px">${t('q.unknown')}</span>`
+            : lvl==='critical' ? ` <span style="color:#ef4444;font-size:10.5px">${t('q.critical')}</span>`
             : lvl==='warn' ? ` <span style="color:#f59e0b;font-size:10.5px">${t('q.warn')}</span>` : '';
-          quotaHtml += `<tr class="${rowCls}"><td>${w.window||'—'}${badge}</td><td>${bar}${burn}</td>
+          quotaHtml += `<tr class="${rowCls}"><td>${escapeHtml(w.window || '—')}${badge}</td><td>${bar}${burn}</td>
             <td class="num" style="color:${color};font-weight:600">${val}</td>
-            <td style="color:#8b909a;font-size:11px;white-space:nowrap">${fmtTime(w.resets_at)}</td></tr>`;
+            <td style="color:#8b909a;font-size:11px;white-space:nowrap">${fmtTime(reset)}</td></tr>`;
         }
         quotaHtml += `</tbody></table>`;
       }
       quotaHtml += `</div>`;
     }
-    $('quota-groups').innerHTML = quotaHtml || `<div class="empty">${t('w.noquota')}</div>`;
+    $('quota-groups').innerHTML = quota === null ? `<div class="empty">${t('state.error')}</div>` : quotaHtml || `<div class="empty">${t('w.noquota')}</div>`;
 
+    });
     // 额度告警横幅
-    renderAlerts(alerts);
+    const alertsRender = renderAuxiliary(alertsRequest, renderAlerts);
+    const cancelAuxiliary = () => {
+      for (const finish of pendingAuxiliary) finish(null, true);
+      if (cancelOverviewAuxiliary === cancelAuxiliary) cancelOverviewAuxiliary = null;
+    };
+    cancelOverviewAuxiliary = cancelAuxiliary;
 
     // 热力图（365 天）
-    renderHeatmap(sum.heatmap || []);
+    renderHeatmap(sum.heatmap || [], sum.heatmap_end_date);
 
-    // 健康时间线
-    await loadHealthTimeline();
-
-    // 模型线条选择 + 4 张趋势图
-    try {
-      activeModels = await fetch(`/api/models/active?range=${range}`).then(r=>r.json());
-      // 清理已不存在的选中项
-      const valid = new Set(activeModels.map(modelKey));
-      selectedModels = selectedModels.filter(k => valid.has(k));
-      renderLinePicker();
-      await loadTrendCharts();
-    } catch(e) { console.error('trend charts failed', e); }
+    // 时间线与趋势互不阻塞，也不阻塞顶部迷你图。
+    loadHealthTimeline(usage.health_timeline);
+    loadOverviewTrends(range, serial, usage.active_models);
 
     // 迷你图（顶部卡片）
     const labels = ts.map(t=>t.bucket);
     const reqData = ts.map(t=>t.requests);
-    const tokData = ts.map(t=>t.input+t.output+t.cache_read);
+    const tokData = ts.map(t=>t.input+t.output+t.cache_read+(t.cache_write||0));
     if (sparkReq) sparkReq.destroy();
     if (sparkTok) sparkTok.destroy();
     sparkReq = makeSpark($('spark-requests'), '#3b82f6');
     sparkReq.data.labels = labels; sparkReq.data.datasets[0].data = reqData; sparkReq.update();
     sparkTok = makeSpark($('spark-tokens'), '#8b5cf6');
     sparkTok.data.labels = labels; sparkTok.data.datasets[0].data = tokData; sparkTok.update();
+    overviewHasData = true;
+    await Promise.allSettled([healthRender, speedRender, tracesRender, routesRender, quotaRender, alertsRender]);
 
   }catch(e){
+    if (serial !== overviewSerial) return;
+    if ($('alertbar-rows').innerHTML) renderAlerts(null);
+    if (overviewHasData && trendVersion === trendSerial) loadTrendCharts();
+    if (timelineVersion === htlSerial) setHealthTimelineError();
+    if (!overviewHasData) $('overview-content').style.display = 'none';
+    $('overview-state').textContent = overviewHasData ? overviewStatus('state.stale') : t('state.error');
+    $('overview-state').style.display = '';
     $('status').textContent = t('st.disconnected');
     console.error(e);
+  }finally{
+    clearTimeout(timeout);
+    controller.abort();
+    if (overviewController === controller) {
+      if (cancelOverviewAuxiliary) cancelOverviewAuxiliary();
+      overviewController = null;
+    }
   }
 }
 
@@ -1206,10 +1632,18 @@ document.querySelectorAll('[data-i18n-ph]').forEach(el => { I18N_ZH[el.dataset.i
 document.querySelectorAll('[data-i18n-title]').forEach(el => { I18N_ZH[el.dataset.i18nTitle] = el.title; });
 // 动态文案（不出现在静态 HTML 里）的中词条
 Object.assign(I18N_ZH, {
+  's.req_trend_desc': '每个时段的请求数', 's.tok_trend_desc': '每个时段的 Token 数',
+  'trend.all': '全部', 'trend.all_total': '· 全部范围合计：{0}', 'trend.selected_total': '· 已选曲线范围合计：{0}',
   'st.connected': '已连接', 'st.disconnected': '连接失败',
-  'w.success': '成功', 'w.failed': '失败', 'w.sr': '成功率', 'w.cache': '缓存',
+  'diag.key_prompt': '请输入管理密钥；未配置时留空。诊断文件仍含时间和状态元数据，请妥善保管。',
+  'diag.failed': '导出失败，请检查管理密钥或网络连接。',
+  'w.success': '成功', 'w.failed': '失败', 'w.gateway_entry_failures': '入口异常', 'w.failed_unbilled': '失败未计费',
+  'w.sr': '成功率', 'w.cache': '缓存', 'trend.partial': '部分时段',
+  'w.rate_tip': '成功率 = 成功 /（成功 + 失败）；客户端取消和结果未知不计入分母。',
   'w.reasoning': '推理', 'w.avg_lat': '平均延迟', 'w.nodata': '暂无数据',
   'w.requests': '次请求', 'w.official': '按官方 API 价折算', 'w.unpriced': '条无价格',
+  'w.recorded': '仅记录价格', 'w.partial': '部分费用', 'w.price_incomplete': '存在未定价记录，无法计算',
+  'w.recorded_tip': '仅统计记录价格；* 表示部分记录未定价',
   'w.monthly': '订阅月费', 'w.speed_avg': '最近 {0} 次平均 {1} tok/s',
   'mode.payg': '按量', 'mode.subscription': '订阅', 'mode.free': '免费',
   'h.ok': '● 正常', 'h.cooldown': '● 冷却',
@@ -1218,31 +1652,46 @@ Object.assign(I18N_ZH, {
   'reset.hours': '{0} 小时后重置', 'reset.minutes': '{0} 分钟后重置',
   'alert.summary': '{0} 项告急 · {1} 项偏低', 'alert.threshold': '（阈值 ≤{0}% 提醒，≤{1}% 告急）',
   'htl.none': '无请求', 'htl.tip': '{0}  共 {1} 次 · 成功 {2} · 失败 {3} · {4} tokens',
-  'htl.stats': '{0} 次 · 成功率 {1}% · {2}/{3} 格有活动',
+  'htl.stats': '{0} 次 · 成功率 {1} · {2}/{3} 格有活动',
+  'htl.col_title': '每列 {0} 格 × {1} 分钟 = {2} 分钟，共 {3} 列',
+  'htl.l_unresolved': '取消 / 未知', 'status.unknown': '结果未知',
   'q.window': '窗口', 'q.remaining': '剩余', 'q.value': '数值', 'q.reset': '重置',
-  'q.critical': '告急', 'q.warn': '偏低',
+  'q.critical': '告急', 'q.warn': '偏低', 'q.stale': '已过期', 'q.unknown': '未知',
+  'q.sample_tip': '基于 {0} 个样本、跨度 {1} 小时线性外推，仅供参考；无重置时间时未考虑重置。',
   'q.per_day': '天', 'q.per_hour': '时', 'q.left': '剩约', 'q.days': '天', 'q.hours': '小时',
   'q.exhaust_in': '约', 'q.at_reset': '重置前预计剩',
   'w.notrace': '暂无追踪数据', 'w.noroutes': '暂无上游', 'w.noquota': '暂无额度数据',
-  'lp.none': '当前范围没有请求记录', 'lp.selected': '已选 {0} / {1}', 'lp.total': '共 {0} 个模型',
-  'tok.input': '输入', 'tok.output': '输出', 'tok.cache': '缓存',
+  'lp.none': '当前范围没有请求记录', 'lp.selected': '已选 {0} / {1} 个渠道与模型组合', 'lp.total': '共 {0} 个渠道与模型组合', 'lp.requests': '{0} 次', 'lp.request_one': '{0} 次',
+  'model.sources': '{0} 个渠道', 'model.source_one': '{0} 个渠道', 'model.source_models': '{0} 个渠道与模型组合', 'model.named': '模型：{0}', 'model.source_counts': '{0} 次请求 · {1} Token', 'model.source_counts_one': '{0} 次请求 · {1} Token',
+  'model.missing': '未记录模型', 'model.empty': '空模型名', 'model.empty_source': '空渠道名',
+  'tok.input': '未命中输入', 'tok.output': '输出（含推理）', 'tok.cache': '缓存读取', 'tok.cache_write': '缓存写入',
   'tok.reasoning': '推理', 'tok.cost': '成本',
   'src.antigravity': 'Antigravity (Google 订阅)', 'src.mistral': 'Mistral',
   'src.opencode': 'OpenCode Zen / Go', 'src.axon': 'axon 中转站',
   'l.total': '共', 'l.calls': '次', 'l.prompt': '总输入', 'l.hit': '命中',
   'l.output': '输出', 'l.cost': '本次费用', 'l.saved': '省', 'l.saved_total': '缓存省下',
-  'l.unpriced': '未定价', 'l.unpriced_tip': '这些记录的模型不在价格表中',
+  'l.unpriced': '未定价', 'l.unpriced_tip': '有 Token 用量，但无记录价格且无法补算，或超出补算上限',
+  'l.failed_unbilled': '失败未计费', 'l.failed_unbilled_tip': '请求失败且没有产生 Token，费用为 $0',
+  'l.gateway_entry_failures': '入口异常',
+  'l.partial_cost': '已定价费用',
+  'l.saved_partial': '缓存省下（部分）', 'l.saved_tip': '根据当前价格表估算；缺少价格的缓存读取不计入',
   'l.key': 'key', 'l.collector': '本地采集', 'l.estimated': '估算',
+  'key.collector': '本地采集（无 Key）', 'key.named': 'Key：{0}',
   'l.new': '新', 'l.write': '写', 'l.think': '含思考', 'l.ttft': '首字',
   'l.with_ttft': '含首字', 'l.total': '总',
   'c.unit_tokens': '共 {0} tokens',
   'l.exporting': '导出中…',
+  'btn.export': '⬇ 导出 CSV',
+  'l.export_done': '已导出 {0} 条。',
+  'l.export_limit': '已导出 {0} 条，共匹配 {1} 条；超过导出上限，文件不完整。',
+  'l.export_error': '导出失败，请重试。',
   'b.input': '未命中新输入', 'b.cache_read': '缓存读取命中', 'b.cache_write': '缓存写入创建',
   'b.output': '模型生成输出', 'b.multiplier': '时段倍率', 'b.official_total': '官方牌价合计',
   'b.saved': '本次缓存省下', 'b.billing': '计费口径',
   'b.sub_note': '订阅制：按官方价折算等效价值，不产生额外支出',
   'b.free_note': '免费渠道：费用仅作参考',
   'b.noprice': '该模型不在价格表中，无法计价',
+  'b.not_applicable': '失败且无 Token 用量，不计费',
   'b.from_record': '记录值', 'b.from_computed': '按当前价格表补算',
   'b.req_model': '请求模型', 'b.account': '账号', 'b.total_ms': '总耗时',
   'b.gen_speed': '纯生成', 'b.trace': '链路',
@@ -1252,10 +1701,13 @@ Object.assign(I18N_ZH, {
 
 const I18N_EN = {
   'tab.overview': 'Overview', 'tab.logs': 'Call Logs',
-  'range.today': 'Today', 'range.1d': 'Last 24h', 'range.7d': 'Last 7 days',
+  'range.today': 'Today', 'range.1d': 'Last 24h', 'range.3d': 'Last 3 days', 'range.7d': 'Last 7 days', 'trend.partial': 'Partial interval',
   'range.30d': 'Last 30 days', 'range.all': 'All time',
   'btn.refresh': '↻ Refresh', 'btn.export': '⬇ Export CSV',
   'st.connecting': 'Connecting', 'st.connected': 'Connected', 'st.disconnected': 'Connection failed',
+  'b.diagnostics': 'Export redacted diagnostics',
+  'diag.key_prompt': 'Enter the admin key, or leave blank if not configured. The export includes time and status metadata; keep it private.',
+  'diag.failed': 'Export failed. Check the admin key or connection.',
   'hdr.updated': 'Updated: ',
   'c.requests': 'Total Requests', 'c.tokens': 'Total Tokens',
   'c.rpm_sub': 'requests / min', 'c.tpm_sub': 'tokens / min',
@@ -1265,23 +1717,22 @@ const I18N_EN = {
   'c.unit_sub': 'per 1M tokens',
   's.htl': 'Request Health Timeline',
   's.htl_desc1': 'Last', 's.htl_desc2': ', each cell', 's.htl_desc3': 'min; read column by column, top to bottom then left to right',
-  'htl.6h': '6 hours', 'htl.24h': '24 hours',
+  'htl.24h': '24 hours', 'htl.3d': '3 days', 'htl.7d': '7 days',
   'htl.col_title': '{0} cells × {1} min = {2} min per column, {3} columns',
   'htl.l_ok': 'ok', 'htl.l_part': 'partial fail', 'htl.l_all': 'all fail', 'htl.l_none': 'idle',
   's.trend': 'Token Composition',
-  's.trend_desc': 'Input / output / cache / reasoning tokens over time (stacked)',
-  's.trend_empty': 'Not enough data points (only 1 bucket so far) — keep running to see the trend',
-  's.cost_trend': 'Cost Trend', 's.cost_trend_desc': 'USD cost over time',
-  's.lp': 'Chart Line Picker', 's.lp_desc': 'Pick models to compare in trend charts.',
+  's.trend_desc': 'Uncached input, cache read, cache write and output; reasoning is included in output',
+  's.cost_trend': 'Cost Trend', 's.cost_trend_desc': 'Recorded prices only; periods with unpriced records are gaps',
+  's.lp': 'Chart Line Picker', 's.lp_desc': 'Select source and model trends; counts are requests.',
   's.req_trend': 'Request Trend', 's.req_trend_desc': 'Requests over time',
   's.tok_trend': 'Token Trend', 's.tok_trend_desc': 'Total tokens over time',
   's.heat': 'Activity Heatmap',
-  's.heat_desc': 'Daily token usage over the last 365 days; darker means more',
-  's.by_source': 'By Source', 's.by_source_desc': 'Usage and cost per upstream',
+  's.heat_desc': 'Daily token usage over the last 365 server-local dates; darker means more',
+  's.by_source': 'By Source', 's.by_source_desc': 'Recorded prices only; * indicates unpriced records',
   's.cost_detail': 'Cost Detail (upstream × model)',
-  's.cost_detail_desc': 'The same model prices differently per upstream; costed by the upstream actually called',
-  's.by_model': 'By Model', 's.by_model_desc': 'Top models by usage',
-  's.by_key': 'By Client Key', 's.by_key_desc': 'Usage and cost per key',
+  's.cost_detail_desc': 'Recorded prices only; * indicates unpriced records',
+  's.by_model': 'By Model', 's.by_model_desc': 'Same model names combined across sources; total includes uncached input, cache reads and writes, and output; reasoning is included in output',
+  's.by_key': 'By Client Key', 's.by_key_desc': 'Recorded prices only; * indicates unpriced records',
   's.health': 'Upstream Health',
   's.health_desc': 'Failure counts, cooldown state and success rate. Failover is off by default: failures return errors immediately.',
   's.speed': 'Generation Speed', 's.speed_desc': 'tok/s of the last 20 successful requests, ',
@@ -1292,7 +1743,7 @@ const I18N_EN = {
   's.quota': 'Quota / Balance',
   's.quota_desc': 'Quota snapshots from each upstream, grouped by source; below threshold they turn red and raise alerts',
   'th.source': 'Source', 'th.type': 'Mode', 'th.requests': 'Requests', 'th.input': 'Input',
-  'th.output': 'Output', 'th.cache': 'Cache', 'th.speed': 'Speed', 'th.cost': 'Cost',
+  'th.output': 'Output', 'th.cache': 'Cache read + write', 'th.speed': 'Speed', 'th.cost': 'Cost',
   'th.cost_list': 'Cost (list)', 'th.per_mtok': 'Per 1M tok', 'th.upstream': 'Upstream',
   'th.model': 'Model',
   'th.chan_model': 'Channel / Model', 'th.cache_hit': 'Cache Hit', 'th.speed_lat': 'Speed / Latency',
@@ -1316,35 +1767,52 @@ const I18N_EN = {
   'alert.threshold': ' (warn ≤{0}%, critical ≤{1}%)',
   'reset.soon': 'resets soon', 'reset.days': 'resets in {0} d',
   'reset.hours': 'resets in {0} h', 'reset.minutes': 'resets in {0} min',
-  'w.success': 'ok', 'w.failed': 'failed', 'w.sr': 'success', 'w.cache': 'cached',
+  'w.success': 'ok', 'w.failed': 'failed', 'w.gateway_entry_failures': 'entry failures',
+  'w.failed_unbilled': 'failed / unbilled', 'w.sr': 'success', 'w.cache': 'cached',
+  'w.rate_tip': 'Success rate = successes / (successes + failures); cancellations and unknown results are excluded.',
   'w.reasoning': 'reasoning', 'w.avg_lat': 'avg latency', 'w.nodata': 'No data',
   'w.requests': 'requests', 'w.official': 'at official API prices', 'w.unpriced': 'unpriced',
+  'w.recorded': 'recorded prices only', 'w.partial': 'partial cost', 'w.price_incomplete': 'Unavailable: some records are unpriced',
+  'w.recorded_tip': 'Recorded prices only; * indicates unpriced records',
   'w.monthly': '· subscription mo.', 'w.speed_avg': 'Avg {1} tok/s over last {0}',
   'mode.payg': 'payg', 'mode.subscription': 'subscription', 'mode.free': 'free',
   'h.ok': '● OK', 'h.cooldown': '● cooldown',
   'u.day': 'd', 'u.hour': 'h', 'u.min': 'min',
   'htl.none': 'no requests',
   'htl.tip': '{0}  {1} reqs · ok {2} · fail {3} · {4} tokens',
-  'htl.stats': '{0} reqs · {1}% ok · {2}/{3} active cells',
+  'htl.stats': '{0} reqs · {1} ok · {2}/{3} active cells',
+  'htl.l_unresolved': 'cancelled / unknown', 'status.unknown': 'Unknown result',
+  'htl.legend_tip': 'Colors reflect successes and failures; grey means only cancellations or unknown results.',
   'q.window': 'Window', 'q.remaining': 'Remaining', 'q.value': 'Value', 'q.reset': 'Resets',
-  'q.critical': 'critical', 'q.warn': 'low',
+  'q.critical': 'critical', 'q.warn': 'low', 'q.stale': 'stale', 'q.unknown': 'unknown',
+  'q.sample_tip': 'Linear estimate from {0} samples over {1} hours; indicative only. Reset is not considered when its time is unknown.',
   'q.per_day': 'day', 'q.per_hour': 'h', 'q.left': '~', 'q.days': 'd left', 'q.hours': 'h',
   'q.exhaust_in': '~', 'q.at_reset': '~ left at reset',
   'w.notrace': 'No trace data', 'w.noroutes': 'No upstreams', 'w.noquota': 'No quota data',
   'lp.none': 'No requests in this range',
-  'lp.selected': '{0} / {1} selected', 'lp.total': '{0} models total',
-  'tok.input': 'Input', 'tok.output': 'Output', 'tok.cache': 'Cache',
+  'lp.selected': '{0} / {1} source-model pairs selected', 'lp.total': '{0} source-model pairs', 'lp.requests': '{0} requests', 'lp.request_one': '{0} request',
+  'model.sources': '{0} sources', 'model.source_one': '{0} source', 'model.source_models': '{0} source-model pairs', 'model.named': 'Model: {0}', 'model.source_counts': '{0} requests · {1} tokens', 'model.source_counts_one': '{0} request · {1} tokens',
+  'model.missing': 'Missing model', 'model.empty': 'Empty model name', 'model.empty_source': 'Empty source name',
+  'tok.input': 'Uncached input', 'tok.output': 'Output (incl. reasoning)', 'tok.cache': 'Cache read', 'tok.cache_write': 'Cache write',
   'tok.reasoning': 'Reasoning', 'tok.cost': 'Cost',
   'src.antigravity': 'Antigravity (Google sub.)', 'src.mistral': 'Mistral',
   'src.opencode': 'OpenCode Zen / Go', 'src.axon': 'axon relay',
   'l.total': 'Total', 'l.calls': 'calls', 'l.prompt': 'Input', 'l.hit': 'Hit rate',
   'l.output': 'Output', 'l.cost': 'Cost', 'l.saved': 'Saved', 'l.saved_total': 'Saved by cache',
   'l.unpriced': 'unpriced',
-  'l.unpriced_tip': 'Models missing from the price table',
+  'l.unpriced_tip': 'Has token usage but no recorded price and could not be backfilled, or exceeds the backfill limit',
+  'l.failed_unbilled': 'failed / unbilled', 'l.failed_unbilled_tip': 'Request failed without producing tokens; cost is $0',
+  'l.gateway_entry_failures': 'entry failures',
+  'l.partial_cost': 'Priced cost',
+  'l.saved_partial': 'Saved by cache (partial)', 'l.saved_tip': 'Estimated using current prices; cache reads without a price are excluded',
   'l.key': 'key', 'l.collector': 'collector', 'l.estimated': 'estimated',
+  'key.collector': 'Local collector (no key)', 'key.named': 'Key: {0}',
   'l.new': 'new', 'l.write': 'write', 'l.think': 'thinking', 'l.ttft': 'TTFT',
   'l.with_ttft': 'with TTFT', 'l.total': 'total',
   'l.exporting': 'Exporting…',
+  'l.export_done': 'Exported {0} rows.',
+  'l.export_limit': 'Exported {0} of {1} matching rows; the export limit was reached.',
+  'l.export_error': 'Export failed. Please try again.',
   'b.input': 'New (uncached) input', 'b.cache_read': 'Cache read (hit)',
   'b.cache_write': 'Cache write (creation)', 'b.output': 'Output generation',
   'b.multiplier': 'Time multiplier', 'b.official_total': 'Official list-price total',
@@ -1352,12 +1820,30 @@ const I18N_EN = {
   'b.sub_note': 'subscription: valued at list price, no extra spend',
   'b.free_note': 'free channel: cost for reference only',
   'b.noprice': 'model not in price table — cannot price',
+  'b.not_applicable': 'failed without token usage — not billable',
   'b.from_record': 'as recorded', 'b.from_computed': 'computed from current price table',
   'b.req_model': 'requested', 'b.account': 'account', 'b.total_ms': 'total',
   'b.gen_speed': 'gen', 'b.trace': 'trace',
   'b.copy_trace': 'copy trace', 'b.copied': 'copied',
 };
 
+Object.assign(I18N_ZH, {
+  'sessions.item': '会话', 'sessions.unassigned': '未归属', 'sessions.selected': '当前筛选',
+  'sessions.cost': '记录价格', 'sessions.unpriced': '记录未定价', 'sessions.calls': '次',
+  'state.loading': '加载中…', 'state.updating': '正在更新，暂时显示上次加载的数据', 'state.updating_range': '正在加载{1}，当前显示{0}的数据', 'state.empty': '暂无数据', 'state.cost_unpriced': '所选范围内所有有请求的时段均包含未定价记录，无法绘制完整成本', 'state.error': '加载失败', 'state.model_filter_unsupported': '当前后端无法按空渠道或空模型筛选趋势，请更新后端', 'state.stale': '刷新失败，显示上次加载的数据', 'state.stale_range': '{1}加载失败，当前仍显示{0}的数据', 'state.retry': '重试',
+  'sessions.error': '会话加载失败', 'l.cancelled': '客户端取消'
+});
+Object.assign(I18N_EN, {
+  's.req_trend_desc': 'Requests per interval', 's.tok_trend_desc': 'Tokens per interval',
+  'trend.all': 'All', 'trend.all_total': '· Range total, all: {0}', 'trend.selected_total': '· Range total, selected lines: {0}',
+  'sessions.title': 'Session costs', 'sessions.note': 'Recorded prices only; no backfill. Unpriced counts records without a recorded price; this differs from the backfilled bill below. Select a session to filter logs.',
+  'sessions.clear': 'All sessions', 'sessions.item': 'Session', 'sessions.unassigned': 'Unassigned',
+  'sessions.selected': 'Selected', 'sessions.cost': 'Recorded cost', 'sessions.unpriced': 'No recorded price',
+  'state.loading': 'Loading…', 'state.updating': 'Updating; showing previously loaded data', 'state.updating_range': 'Loading {1}; showing {0}', 'state.empty': 'No data', 'state.cost_unpriced': 'Every time bucket with requests contains unpriced records; a complete cost trend cannot be drawn', 'state.error': 'Failed to load', 'state.model_filter_unsupported': 'This backend cannot filter trends by an empty source or model; update the backend', 'state.stale': 'Refresh failed; showing previously loaded data', 'state.stale_range': 'Failed to load {1}; still showing {0}', 'state.retry': 'Retry',
+  'sessions.calls': 'calls', 'sessions.error': 'Failed to load sessions', 'status.cancelled': 'Client cancelled', 'l.cancelled': 'Client cancelled',
+  'auth.label': 'Statistics read key (optional, held in page memory only)', 'auth.apply': 'Apply',
+  'auth.denied': 'Statistics access denied. Check the statistics key.'
+});
 let LANG = localStorage.getItem('ug_lang') || 'zh';
 function t(key, ...args){
   const dict = LANG === 'en' ? I18N_EN : null;
@@ -1384,10 +1870,12 @@ function applyStaticText(){
 document.querySelectorAll('[data-lang]').forEach(pill => {
   pill.onclick = () => {
     if (pill.dataset.lang === LANG) return;
+    $('export-state').style.display = 'none';
     LANG = pill.dataset.lang;
     localStorage.setItem('ug_lang', LANG);
     applyStaticText();
-    if (logsState.lastData && currentTab === 'logs') renderLogs(logsState.lastData);
+    if ($('l-export').disabled) $('l-export').textContent = t('l.exporting');
+    if (currentTab === 'logs') loadLogs();
     if (currentTab === 'overview') load();
   };
 });
@@ -1439,18 +1927,87 @@ const LOGS_PAGE_SIZE = 50;
 const logsState = {
   page: 1, pages: 1, total: 0, lastData: null,
   expanded: new Set(),        // 展开账单的记录 id（刷新后保持展开）
-  timer: null, fetching: false,
+  timer: null, fetching: false, controller: null, serial: 0,
 };
-const traceCache = {};        // trace_id -> Promise（展开行时按需拉链路）
+const traceCache = new Map();  // trace_id -> Promise（展开行时按需拉链路）
+const sessionState = {page: 1, pages: 1, selected: undefined, data: null, serial: 0, controller: null};
+// Escape untrusted text in HTML text and quoted attribute contexts; never use for JS, CSS or URLs.
+function escapeHtml(v){
+  return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
+}
+async function loadSessions(skipIfFetching = false){
+  if (skipIfFetching && sessionState.controller) return;
+  const serial = ++sessionState.serial;
+  if (sessionState.controller) sessionState.controller.abort();
+  const controller = new AbortController();
+  sessionState.controller = controller;
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  if (!sessionState.data) {
+    $('sessions-list').textContent = t('state.loading');
+    $('sessions-page').textContent = '';
+    $('sessions-prev').disabled = true; $('sessions-next').disabled = true;
+  } else {
+    $('sessions-state').textContent = t('state.updating');
+    $('sessions-state').style.display = '';
+  }
+  const p = lParams(); p.delete('session_key'); p.delete('unassigned');
+  p.set('page', sessionState.page); p.set('page_size', 20);
+  try {
+    const response = await apiFetch('/api/sessions?' + p, {signal: controller.signal});
+    if (!response.ok) throw new Error('sessions');
+    const data = await response.json();
+    if (serial !== sessionState.serial) return;
+    const lastPage = Math.max(1, data.pages || 1);
+    if (sessionState.page > lastPage) {
+      sessionState.page = lastPage;
+      return loadSessions();
+    }
+    sessionState.data = data; sessionState.pages = lastPage;
+    $('sessions-state').style.display = 'none';
+    renderSessions();
+  } catch(e) {
+    if (serial !== sessionState.serial) return;
+    if (sessionState.data) {
+      $('sessions-state').textContent = t('state.stale');
+      $('sessions-state').style.display = '';
+    } else $('sessions-list').textContent = t('sessions.error');
+  } finally {
+    clearTimeout(timeout);
+    if (sessionState.controller === controller) sessionState.controller = null;
+  }
+}
+function renderSessions(){
+  const data = sessionState.data; if (!data) return;
+  const list = $('sessions-list'); list.replaceChildren();
+  if (!(data.items || []).length) list.textContent = t('state.empty');
+  (data.items || []).forEach((item, i) => {
+    const button = document.createElement('button'); button.className = 'pill';
+    const label = item.session_key == null ? t('sessions.unassigned') : t('sessions.item') + ' ' + ((data.page - 1) * data.page_size + i + 1);
+    const cost = item.requests && item.unpriced_requests === item.requests ? '—' : fmtCost6(item.cost_recorded_usd);
+    button.textContent = `${label} · ${fmt(item.requests)} ${t('sessions.calls')} · ${t('sessions.cost')} ${cost} · ${t('sessions.unpriced')} ${fmt(item.unpriced_requests)}`;
+    button.onclick = () => { $('export-state').style.display = 'none'; sessionState.selected = item.session_key; logsState.page = 1; renderSessions(); loadLogs(); };
+    list.appendChild(button);
+  });
+  $('sessions-page').textContent = t('page.info', data.page, sessionState.pages, fmt(data.total));
+  $('sessions-prev').disabled = data.page <= 1; $('sessions-next').disabled = data.page >= sessionState.pages;
+  $('sessions-selected').textContent = sessionState.selected === undefined ? '' : t('sessions.selected') + ': ' + (sessionState.selected === null ? t('sessions.unassigned') : t('sessions.item'));
+}
+$('sessions-prev').onclick = () => { if (sessionState.page > 1) { sessionState.page--; loadSessions(); } };
+$('sessions-next').onclick = () => { if (sessionState.page < sessionState.pages) { sessionState.page++; loadSessions(); } };
+$('sessions-clear').onclick = () => { $('export-state').style.display = 'none'; sessionState.selected = undefined; logsState.page = 1; renderSessions(); loadLogs(); };
 
 function fmtCost(v){
   if (v == null || typeof v !== 'number' || isNaN(v)) return null;
   if (v >= 0.01)   return '$' + v.toFixed(4);
   if (v >= 0.0001) return '$' + v.toFixed(5);
+  if (v > 0 && v < 0.000001) return '$' + v.toExponential(2);
   if (v > 0)       return '$' + v.toFixed(6);
   return '$0';
 }
-function fmtCost6(v){ return '$' + Number(v || 0).toFixed(6); }
+function fmtCost6(v){
+  const number = Number(v || 0);
+  return number > 0 && number < 0.000001 ? '$' + number.toExponential(2) : '$' + number.toFixed(6);
+}
 
 function lParams(){
   const p = new URLSearchParams();
@@ -1460,38 +2017,79 @@ function lParams(){
   if ($('l-model').value.trim()) p.set('model', $('l-model').value.trim());
   p.set('status', $('l-status').value);
   p.set('origin', $('l-origin').value);
+  if (sessionState.selected === null) p.set('unassigned', 'true');
+  else if (sessionState.selected !== undefined) p.set('session_key', sessionState.selected);
   p.set('page', logsState.page);
   p.set('page_size', LOGS_PAGE_SIZE);
   return p;
 }
 
-async function loadLogs(){
-  if (logsState.fetching) return;
+async function loadLogs(isPolling = false){
+  if (isPolling && logsState.fetching) return;
+  loadSessions(isPolling);
+  const serial = ++logsState.serial;
+  if (logsState.controller) logsState.controller.abort();
+  if (!logsState.lastData) {
+    $('tb-logs').innerHTML = `<tr><td colspan="9" class="empty">${t('state.loading')}</td></tr>`;
+  } else {
+    $('logs-state').textContent = t('state.updating');
+    $('logs-state').style.display = '';
+  }
   logsState.fetching = true;
+  const controller = new AbortController();
+  logsState.controller = controller;
+  const timeout = setTimeout(() => controller.abort(), 30000);
   try{
-    const data = await fetch('/api/logs?' + lParams()).then(r => r.json());
+    const data = await apiFetch('/api/logs?' + lParams(), {signal: controller.signal}).then(r => r.json());
+    if (serial !== logsState.serial) return;
+    const lastPage = Math.max(1, data.pages || 1);
+    if (logsState.page > lastPage) {
+      logsState.page = lastPage;
+      return loadLogs();
+    }
     logsState.lastData = data;
     logsState.total = data.total || 0;
-    logsState.pages = Math.max(1, data.pages || 1);
+    logsState.pages = lastPage;
+    $('logs-state').style.display = 'none';
     renderLogs(data);
-  }catch(e){ console.error('loadLogs failed', e); }
-  finally{ logsState.fetching = false; }
+  }catch(e){
+    if (serial !== logsState.serial) return;
+    console.error('loadLogs failed', e);
+    if (logsState.lastData) {
+      $('logs-state').textContent = t('state.stale');
+      $('logs-state').style.display = '';
+    } else $('tb-logs').innerHTML = `<tr><td colspan="9" class="empty">${t('state.error')}</td></tr>`;
+  }
+  finally{
+    clearTimeout(timeout);
+    if (logsState.controller === controller) {
+      logsState.controller = null;
+      logsState.fetching = false;
+    }
+  }
 }
 
 function renderLogs(data){
   const s = data.summary || {};
   const items = data.items || [];
-  const cost = fmtCost(s.cost_usd);
-  const saved = fmtCost(s.cache_saved_usd);
+  const noPrice = (s.billable_requests || 0) > 0 && (s.priced_requests || 0) === 0;
+  const cost = noPrice ? null : fmtCost(s.cost_usd || 0);
+  const savedCoverage = Number.isInteger(s.cache_saved_priced_requests) && Number.isInteger(s.cache_saved_unpriced_requests);
+  const savedUnknown = !savedCoverage || (s.cache_saved_unpriced_requests > 0 && s.cache_saved_priced_requests === 0);
+  const saved = savedUnknown ? '—' : (fmtCost(s.cache_saved_usd) ?? '—');
   $('l-summary').innerHTML = [
     `${t('l.total')} <b>${fmt(s.requests)}</b> ${t('l.calls')}` +
-      (s.failed ? ` · <span style="color:var(--red)">${t('w.failed')} ${fmt(s.failed)}</span>` : ''),
+      (s.failed ? ` · <span style="color:var(--red)">${t('w.failed')} ${fmt(s.failed)}</span>` : '') +
+      (s.cancelled ? ` · ${t('l.cancelled')} ${fmt(s.cancelled)}` : '') +
+      (s.unknown ? ` · ${t('status.unknown')} ${fmt(s.unknown)}` : ''),
     `${t('l.prompt')} <b>${fmt(s.prompt_tokens)}</b>`,
-    `${t('l.hit')} <b>${s.cache_rate}%</b>`,
+    `${t('l.hit')} <b>${escapeHtml(s.cache_rate)}%</b>`,
     `${t('l.output')} <b>${fmt(s.output)}</b>`,
-    `${t('l.cost')} <b style="color:var(--orange)">${cost ?? '—'}</b>`,
-    saved ? `${t('l.saved_total')} <b style="color:var(--green)">${saved}</b>` : '',
+    `${t(s.unpriced_requests && !noPrice ? 'l.partial_cost' : 'l.cost')} <b style="color:var(--orange)">${cost ?? '—'}</b>`,
+    `<span title="${t('l.saved_tip')}">${t(s.cache_saved_unpriced_requests && !savedUnknown ? 'l.saved_partial' : 'l.saved_total')} <b style="color:var(--green)">${saved}</b></span>`,
     s.unpriced_requests ? `<span title="${t('l.unpriced_tip')}">${t('l.unpriced')} ${fmt(s.unpriced_requests)}</span>` : '',
+    s.failed_unbilled_requests ? `<span title="${t('l.failed_unbilled_tip')}">${t('l.failed_unbilled')} ${fmt(s.failed_unbilled_requests)}</span>` : '',
+    s.gateway_entry_failures ? `<span>${t('l.gateway_entry_failures')} ${fmt(s.gateway_entry_failures)}</span>` : '',
   ].filter(Boolean).join('');
 
   $('tb-logs').innerHTML = items.length
@@ -1528,12 +2126,13 @@ function logRowHtml(x, i){
   const tstr = $('l-range').value === 'today'
     ? d.toLocaleTimeString('zh-CN')
     : d.toLocaleString('zh-CN', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
-  const stColor = x.status < 400 ? 'var(--green)' : 'var(--red)';
+  const stColor = x.result === 'client_cancelled' || x.result === 'unknown' || (x.result == null && x.status == null)
+    ? 'var(--muted)' : (x.result ? x.result === 'success' : x.status < 400) ? 'var(--green)' : 'var(--red)';
   const prompt = x.prompt_tokens || 0;
   const hit = x.cache_rate || 0;
   const hitCls = hit >= 50 ? 'hit-hi' : hit > 0 ? 'hit-mid' : 'hit-none';
-  const hitBadge = prompt > 0 ? `<span class="badge ${hitCls}">${hit}%</span>` : '';
-  const cost = fmtCost(x.cost_usd);
+  const hitBadge = prompt > 0 ? `<span class="badge ${hitCls}">${escapeHtml(hit)}%</span>` : '';
+  const cost = x.cost_source === 'not_applicable' ? fmtCost(0) : fmtCost(x.cost_usd);
   const saved = x.breakdown && x.breakdown.cache_saved_usd > 0 ? fmtCost(x.breakdown.cache_saved_usd) : null;
   // 大字 = 纯生成 tok/s（扣除首字等待）；小字附上含首字的总均值
   const speed = x.gen_tok_per_sec != null ? x.gen_tok_per_sec.toFixed(1)
@@ -1555,10 +2154,10 @@ function logRowHtml(x, i){
   return `<tr class="log-row" data-i="${i}">
     <td style="font-size:12px;color:var(--muted);white-space:nowrap">${tstr}</td>
     <td style="max-width:230px">
-      <span class="tag">${x.alias || x.source}</span> <span style="font-size:12.5px">${x.model || '—'}</span>
-      <div class="cellsub">${subBits}</div>
+      <span class="tag">${escapeHtml(x.alias || x.source)}</span> <span style="font-size:12.5px">${escapeHtml(x.model || '—')}</span>
+      <div class="cellsub">${escapeHtml(subBits)}</div>
     </td>
-    <td class="num" style="color:${stColor};font-weight:600">${x.status}</td>
+    <td class="num" style="color:${stColor};font-weight:600">${escapeHtml(x.status)}${x.result ? `<div class="cellsub">${escapeHtml(x.result === 'client_cancelled' ? t('l.cancelled') : x.result)}${x.error_stage ? ' · ' + escapeHtml(x.error_stage) : ''}</div>` : ''}</td>
     <td class="num">${fmt(prompt)}<div class="cellsub">${t('l.new')} ${fmt(x.input_tokens || 0)}</div></td>
     <td class="num">${fmt(x.cache_read || 0)} ${hitBadge}${x.cache_write ? `<div class="cellsub">${t('l.write')} ${fmt(x.cache_write)}</div>` : ''}</td>
     <td class="num">${fmt(x.output_tokens || 0)}${x.reasoning ? `<div class="cellsub">${t('l.think')} ${fmt(x.reasoning)}</div>` : ''}</td>
@@ -1593,24 +2192,26 @@ async function fillLogDetail(i){
   if (!box || !x) return;
   const b = x.breakdown;
   const srcNote = x.cost_source === 'recorded' ? t('b.from_record')
-    : x.cost_source === 'computed' ? t('b.from_computed') : t('b.noprice');
+    : x.cost_source === 'computed' ? t('b.from_computed')
+    : x.cost_source === 'not_applicable' ? t('b.not_applicable') : t('b.noprice');
+  const costText = x.cost_source === 'not_applicable' ? fmtCost(0) : (fmtCost(x.cost_usd) ?? '—');
   let html = `
     <div class="bill-row" style="font-size:13.5px">
       <span class="k" style="color:var(--text);font-weight:700">${t('l.cost')}</span>
-      <span class="v" style="color:var(--orange);font-size:16px">${fmtCost(x.cost_usd) ?? '—'}
+      <span class="v" style="color:var(--orange);font-size:16px">${costText}
         <span style="font-size:11px;color:var(--muted);font-weight:400">（${srcNote}）</span></span>
     </div>`;
   if (b){
     const u = b.units;
     html += `
-      <div class="bill-row"><span class="k">${t('b.input')} · ${fmt(x.input_tokens || 0)} tok × $${u.input} / 1M</span><span class="v">${fmtCost6(b.input_cost)}</span></div>
-      <div class="bill-row"><span class="k">${t('b.cache_read')} · ${fmt(x.cache_read || 0)} tok × $${u.cache_read} / 1M</span><span class="v">${fmtCost6(b.cache_read_cost)}</span></div>
-      ${x.cache_write ? `<div class="bill-row"><span class="k">${t('b.cache_write')} · ${fmt(x.cache_write)} tok × $${u.cache_write} / 1M</span><span class="v">${fmtCost6(b.cache_write_cost)}</span></div>` : ''}
-      <div class="bill-row"><span class="k">${t('b.output')} · ${fmt(x.output_tokens || 0)} tok × $${u.output} / 1M${x.reasoning ? `（${t('l.think')} ${fmt(x.reasoning)}）` : ''}</span><span class="v">${fmtCost6(b.output_cost)}</span></div>
-      ${b.multiplier !== 1 ? `<div class="bill-row"><span class="k">${t('b.multiplier')}</span><span class="v">× ${b.multiplier}</span></div>` : ''}
+      <div class="bill-row"><span class="k">${t('b.input')} · ${fmt(x.input_tokens || 0)} tok × $${escapeHtml(u.input)} / 1M</span><span class="v">${fmtCost6(b.input_cost)}</span></div>
+      <div class="bill-row"><span class="k">${t('b.cache_read')} · ${fmt(x.cache_read || 0)} tok × $${escapeHtml(u.cache_read)} / 1M</span><span class="v">${fmtCost6(b.cache_read_cost)}</span></div>
+      ${x.cache_write ? `<div class="bill-row"><span class="k">${t('b.cache_write')} · ${fmt(x.cache_write)} tok × $${escapeHtml(u.cache_write)} / 1M</span><span class="v">${fmtCost6(b.cache_write_cost)}</span></div>` : ''}
+      <div class="bill-row"><span class="k">${t('b.output')} · ${fmt(x.output_tokens || 0)} tok × $${escapeHtml(u.output)} / 1M${x.reasoning ? `（${t('l.think')} ${fmt(x.reasoning)}）` : ''}</span><span class="v">${fmtCost6(b.output_cost)}</span></div>
+      ${b.multiplier !== 1 ? `<div class="bill-row"><span class="k">${t('b.multiplier')}</span><span class="v">× ${escapeHtml(b.multiplier)}</span></div>` : ''}
       <div class="bill-row" style="border-top:1px dashed var(--line);margin-top:5px;padding-top:6px"><span class="k">${t('b.official_total')}</span><span class="v">${fmtCost6(b.total_cost)}</span></div>
       ${b.cache_saved_usd > 0 ? `<div class="bill-row"><span class="k">${t('b.saved')}</span><span class="v" style="color:var(--green)">${fmtCost6(b.cache_saved_usd)}</span></div>` : ''}
-      <div class="bill-row"><span class="k">${t('b.billing')} <span class="tag">${t('mode.' + (x.billing_mode || 'payg'))}</span></span><span class="v" style="font-weight:400;color:var(--muted)">${x.billing_mode === 'subscription' ? t('b.sub_note') : x.billing_mode === 'free' ? t('b.free_note') : ''}</span></div>`;
+      <div class="bill-row"><span class="k">${t('b.billing')} <span class="tag">${escapeHtml(t('mode.' + (x.billing_mode || 'payg')))}</span></span><span class="v" style="font-weight:400;color:var(--muted)">${x.billing_mode === 'subscription' ? t('b.sub_note') : x.billing_mode === 'free' ? t('b.free_note') : ''}</span></div>`;
   }
   const metaBits = [];
   if (x.requested_model && x.requested_model !== x.model) metaBits.push(`${t('b.req_model')} ${x.requested_model}`);
@@ -1618,55 +2219,90 @@ async function fillLogDetail(i){
   if (x.ttft_ms != null) metaBits.push(`${t('l.ttft')} ${x.ttft_ms >= 1000 ? (x.ttft_ms/1000).toFixed(1)+'s' : Math.round(x.ttft_ms)+'ms'}`);
   if (x.latency_ms != null) metaBits.push(`${t('b.total_ms')} ${x.latency_ms >= 1000 ? (x.latency_ms/1000).toFixed(1)+'s' : Math.round(x.latency_ms)+'ms'}`);
   if (x.gen_tok_per_sec != null) metaBits.push(`${t('b.gen_speed')} ${x.gen_tok_per_sec.toFixed(1)} tok/s`);
-  if (metaBits.length) html += `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${metaBits.join(' · ')}</div>`;
+  if (metaBits.length) html += `<div style="margin-top:8px;font-size:12px;color:var(--muted)">${escapeHtml(metaBits.join(' · '))}</div>`;
   if (x.trace_id){
     html += `<div style="margin-top:6px;display:flex;align-items:center;gap:6px">
-      <span class="pill" style="padding:2px 10px;font-size:11px;cursor:pointer;user-select:none" onclick="copyTraceId(this,'${x.trace_id}')">${t('b.copy_trace')}</span>
-      <span style="font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace">${x.trace_id}</span>
+      <span class="pill copy-trace" style="padding:2px 10px;font-size:11px;cursor:pointer;user-select:none">${t('b.copy_trace')}</span>
+      <span style="font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace">${escapeHtml(x.trace_id)}</span>
     </div>`;
   }
   html += `<div id="log-trace-${i}" style="margin-top:8px"></div>`;
   box.innerHTML = html;
+  const copyButton = box.querySelector('.copy-trace');
+  if (copyButton) copyButton.onclick = () => copyTraceId(copyButton, x.trace_id);
 
   // 按需拉取链路耗时
   if (x.trace_id){
-    if (!traceCache[x.trace_id]){
-      traceCache[x.trace_id] = fetch(`/api/traces/${x.trace_id}`).then(r => r.json()).catch(() => null);
-    }
-    const tr = await traceCache[x.trace_id];
     const el = $('log-trace-' + i);
-    if (el && tr && Array.isArray(tr.spans)){
+    if (!el) return;
+    el.textContent = t('state.loading');
+    let request = traceCache.get(x.trace_id);
+    if (!request){
+      request = apiFetch(`/api/traces/${encodeURIComponent(x.trace_id)}`).then(r => r.json()).then(data => {
+        if (!data || !Array.isArray(data.spans)) throw new Error('Invalid trace');
+        return data;
+      });
+      traceCache.set(x.trace_id, request);
+    }
+    try {
+      const tr = await request;
+      if (logsState.lastData?.items[i] !== x || document.querySelector(`#log-detail-${i} .log-bill`) !== box || $('log-trace-' + i) !== el) return;
+      if (tr && Array.isArray(tr.spans)){
       const chain = tr.spans.filter(sp => sp.duration_ms != null).map(sp => {
         const w = Math.min(100, Math.max(1, sp.duration_ms / Math.max(1, tr.total_ms) * 100));
-        const color = sp.error ? '#ef4444' : sp.name === 'upstream' ? '#3b82f6' : '#8b5cf6';
-        return `<span title="${sp.name}: ${sp.duration_ms}ms${sp.error ? '\n' + sp.error : ''}"
+        const failed = sp.has_error === true || !!sp.error;
+        const color = failed ? '#ef4444' : sp.name === 'upstream' ? '#3b82f6' : '#8b5cf6';
+        return `<span title="${escapeHtml(`${sp.name}: ${sp.duration_ms}ms${failed ? '\n' + t('w.failed') : ''}`)}"
                   style="display:inline-block;width:${w}px;height:6px;background:${color};border-radius:2px;margin-right:1px;vertical-align:middle"></span>`;
       }).join('');
       el.innerHTML = `<div style="display:flex;align-items:center;gap:8px;font-size:12px">
         <span style="color:var(--muted)">${t('b.trace')}</span>${chain}
         <span style="color:var(--muted)">${tr.total_ms != null ? tr.total_ms.toFixed(0) + 'ms' : ''}</span></div>`;
+      }
+    } catch(e) {
+      if (traceCache.get(x.trace_id) === request) traceCache.delete(x.trace_id);
+      if (logsState.lastData?.items[i] !== x || document.querySelector(`#log-detail-${i} .log-bill`) !== box || $('log-trace-' + i) !== el) return;
+      el.textContent = t('state.error') + ' · ';
+      const retry = document.createElement('button');
+      retry.className = 'pill'; retry.textContent = t('state.retry');
+      retry.onclick = () => fillLogDetail(i);
+      el.appendChild(retry);
     }
   }
 }
 
+function csvCell(value){
+  let text = value == null ? '' : String(value);
+  if (typeof value === 'string' && /^[\s\uFEFF]*[=+\-@\t\r]/.test(value)) text = "'" + text;
+  return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+
+function exportParams(){
+  const params = lParams();
+  params.delete('page'); params.delete('page_size');
+  return params;
+}
+
 async function exportLogs(){
   const btn = $('l-export');
-  const orig = btn.textContent;
+  if (btn.disabled) return;
+  const state = $('export-state');
+  const keyVersion = statsKeyVersion;
+  btn.disabled = true;
   btn.textContent = t('l.exporting');
+  state.style.display = 'none';
+  const params = exportParams();
   try{
-    const all = [];
-    const maxRows = 5000;
-    for (let p = 1; p <= 10 && all.length < maxRows; p++){
-      const params = lParams();
-      params.set('page', p);
-      params.set('page_size', 500);
-      const data = await fetch('/api/logs?' + params).then(r => r.json());
-      all.push(...(data.items || []));
-      if (!data.items || !data.items.length || all.length >= (data.total || 0)) break;
-    }
+    const data = await apiFetch('/api/logs/export?' + params).then(r => r.json());
+    if (keyVersion !== statsKeyVersion) return;
+    if (!Array.isArray(data.items) || !Number.isInteger(data.total) || data.total < 0 ||
+        data.items.length !== Math.min(data.total, 5000))
+      throw new Error('Invalid export response');
+    const all = data.items;
     const head = ['time','source','alias','model','requested_model','client_key','status',
       'prompt_tokens','uncached_input','cache_read','cache_write','output_tokens','reasoning',
-      'total_tokens','cache_rate_pct','cost_usd','ttft_ms','latency_ms','tok_per_sec'];
+      'total_tokens','cache_rate_pct','cost_usd','ttft_ms','latency_ms','tok_per_sec',
+      'result','error_stage','error_kind','error_status','cost_source'];
     const lines = [head.join(',')];
     for (const x of all){
       const row = [
@@ -1674,8 +2310,9 @@ async function exportLogs(){
         x.client_key, x.status, x.prompt_tokens, x.input_tokens, x.cache_read, x.cache_write,
         x.output_tokens, x.reasoning, x.total_tokens, x.cache_rate,
         x.cost_usd != null ? x.cost_usd : '', x.ttft_ms ?? '', x.latency_ms ?? '', x.tok_per_sec ?? '',
+        x.result, x.error_stage, x.error_kind, x.error_status, x.cost_source,
       ];
-      lines.push(row.map(v => (typeof v === 'string' && /[",\n]/.test(v)) ? '"' + v.replace(/"/g, '""') + '"' : v).join(','));
+      lines.push(row.map(csvCell).join(','));
     }
     const blob = new Blob(['\ufeff' + lines.join('\n')], {type: 'text/csv;charset=utf-8'});
     const a = document.createElement('a');
@@ -1683,40 +2320,75 @@ async function exportLogs(){
     a.download = `usage-logs-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
+    if (keyVersion === statsKeyVersion && params.toString() === exportParams().toString()) {
+      state.textContent = data.total > all.length
+        ? t('l.export_limit', all.length, data.total)
+        : t('l.export_done', all.length);
+      state.style.display = '';
+    }
+  } catch(e) {
+    console.error('exportLogs failed', e);
+    if (keyVersion === statsKeyVersion && params.toString() === exportParams().toString()) {
+      state.textContent = t('l.export_error');
+      state.style.display = '';
+    }
   } finally {
-    btn.textContent = orig;
+    btn.disabled = false;
+    btn.textContent = t('btn.export');
   }
 }
 
+let logFiltersSerial = 0;
 async function populateLogFilters(){
+  const serial = ++logFiltersSerial;
   try{
-    const routes = await fetch('/api/routes').then(r => r.json());
+    const [routes, keys] = await Promise.all([
+      apiFetch('/api/routes').then(r => r.json()),
+      apiFetch('/api/usage?range=all&group_by=client_key').then(r => r.json()),
+    ]);
+    if (serial !== logFiltersSerial) return;
     const src = $('l-source');
-    for (const r of routes){
+    const keySel = $('l-key');
+    const selectedSource = src.value, selectedKey = keySel.value;
+    const sourceOptions = routes.map(r => {
       const opt = document.createElement('option');
       opt.value = r.name;
       opt.textContent = `${r.alias || r.name} · ${r.name}`;
-      src.appendChild(opt);
-    }
-    const keys = await fetch('/api/usage?range=all&group_by=client_key').then(r => r.json());
-    const keySel = $('l-key');
-    for (const k of keys){
-      if (!k.grp || k.grp === '(unknown)') continue;
+      return opt;
+    });
+    const keyOptions = keys.filter(k => k.grp && (k.is_collector === 0 ||
+      (k.is_collector == null && k.grp !== '(unknown)'))).map(k => {
       const opt = document.createElement('option');
       opt.value = k.grp;
       opt.textContent = `${k.grp} · ${fmt(k.requests)}`;
-      keySel.appendChild(opt);
+      return opt;
+    });
+    src.replaceChildren(src.options[0], ...sourceOptions);
+    keySel.replaceChildren(keySel.options[0], ...keyOptions);
+    src.value = sourceOptions.some(opt => opt.value === selectedSource) ? selectedSource : '';
+    keySel.value = keyOptions.some(opt => opt.value === selectedKey) ? selectedKey : '';
+    if ((src.value !== selectedSource || keySel.value !== selectedKey) && currentTab === 'logs') {
+      $('export-state').style.display = 'none';
+      logsState.page = 1; sessionState.page = 1; loadLogs();
     }
   }catch(e){ console.error('populate log filters failed', e); }
 }
 
-$('l-range').onchange = $('l-source').onchange = $('l-key').onchange =
+$('l-range').onchange = () => {
+  $('export-state').style.display = 'none';
+  $('range').value = $('l-range').value;
+  syncHealthRange($('range').value);
+  ++overviewSerial; ++trendSerial; ++htlSerial;
+  logsState.page = 1; sessionState.page = 1; loadLogs();
+};
+$('l-source').onchange = $('l-key').onchange =
 $('l-origin').onchange = $('l-status').onchange =
-  () => { logsState.page = 1; loadLogs(); };
+  () => { $('export-state').style.display = 'none'; logsState.page = 1; sessionState.page = 1; loadLogs(); };
 let lSearchTimer = null;
 $('l-model').oninput = () => {
+  $('export-state').style.display = 'none';
   clearTimeout(lSearchTimer);
-  lSearchTimer = setTimeout(() => { logsState.page = 1; loadLogs(); }, 400);
+  lSearchTimer = setTimeout(() => { logsState.page = 1; sessionState.page = 1; loadLogs(); }, 400);
 };
 $('l-model').onkeydown = e => { if (e.key === 'Enter'){ clearTimeout(lSearchTimer); logsState.page = 1; loadLogs(); } };
 $('l-reload').onclick = () => loadLogs();
@@ -1728,7 +2400,7 @@ $('l-auto').onchange = () => {
   const sec = parseInt($('l-auto').value, 10);
   if (sec > 0){
     logsState.timer = setInterval(() => {
-      if (currentTab === 'logs' && !document.hidden) loadLogs();
+      if (currentTab === 'logs' && !document.hidden && !logsState.fetching) loadLogs(true);
     }, sec * 1000);
   }
 };
@@ -1737,21 +2409,57 @@ applyStaticText();
 populateLogFilters();
 $('l-auto').dispatchEvent(new Event('change'));
 
+$('stats-key-apply').onclick = () => {
+  $('export-state').style.display = 'none';
+  statsKey = $('stats-key').value;
+  $('stats-key').value = '';
+  statsKeyVersion++;
+  $('stats-auth-error').style.display = 'none';
+  traceCache.clear();
+  populateLogFilters();
+  load();
+  if (currentTab === 'logs') loadLogs();
+};
+$('export-diagnostics').onclick = async () => {
+  const adminKey = prompt(t('diag.key_prompt'));
+  if (adminKey === null) return;
+  try {
+    const headers = new Headers();
+    if (adminKey) headers.set('X-Admin-Key-Encoded', encodeURIComponent(adminKey));
+    const response = await fetch('/api/diagnostics', {headers, cache: 'no-store'});
+    if (!response.ok) throw new Error('export failed');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'usage-gateway-diagnostics.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (_) { alert(t('diag.failed')); }
+};
 $('refresh').onclick = () => currentTab === 'logs' ? loadLogs() : load();
-$('range').onchange = load;
+$('range').onchange = () => {
+  $('export-state').style.display = 'none';
+  $('l-range').value = $('range').value;
+  syncHealthRange($('range').value);
+  logsState.page = 1; sessionState.page = 1;
+  if (currentTab === 'logs') {
+    ++overviewSerial; ++trendSerial; ++htlSerial;
+    loadLogs();
+  } else load();
+};
 
 // 健康时间线的时间范围切换
 document.querySelectorAll('.htl-range').forEach(el => {
   el.onclick = () => {
-    document.querySelectorAll('.htl-range').forEach(x => x.classList.remove('active'));
-    el.classList.add('active');
-    htlMinutes = parseInt(el.dataset.min, 10);
-    loadHealthTimeline();
+    $('range').value = ({'1440':'1d', '4320':'3d', '10080':'7d'})[el.dataset.min];
+    $('range').onchange();
   };
 });
 
 load();
-setInterval(load, 30000);
 </script>
 </body>
 </html>

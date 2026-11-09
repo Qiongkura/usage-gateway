@@ -214,22 +214,33 @@
     </div>
   </div>
 
-  <div id="status"><span class="sdot"></span><span id="status-text">连接中…</span></div>
+  <div id="status" title="点击设置统计密钥"><span class="sdot"></span><span id="status-text">连接中…</span></div>
 </div>
 
 <script>
 const API = location.origin;
 const POLL_MS = 1500;
+const POLL_TIMEOUT_MS = 10000;
 const SPARK_N = 36;
 
 let history = [];
 try { history = JSON.parse(localStorage.getItem('ug_spark') || '[]'); } catch (e) { history = []; }
 if (!Array.isArray(history)) history = [];
-let lastTs = null;
+let lastRecord = null;
 let topmost = true;
 let timer = null;
+let pollSerial = 0;
+let pollInFlight = false;
+let pollController = null;
 
 const $ = id => document.getElementById(id);
+// 密钥仅保存在当前窗口内，不写入 URL 或持久存储。
+let statsKey = '';
+$('status').addEventListener('pointerdown', e => e.stopPropagation());
+$('status').addEventListener('click', () => {
+  const value = prompt('输入统计密钥（留空清除，仅保存在当前窗口）', '');
+  if (value !== null) { statsKey = value; poll(true); }
+});
 
 function setStatus(text, isErr) {
   $('status-text').textContent = text;
@@ -311,16 +322,30 @@ function fmtCost(v) {
   return '$0';
 }
 
-async function poll() {
+async function poll(force = false) {
+  if (pollInFlight && !force) return;
+  const serial = ++pollSerial;
+  if (pollController) pollController.abort();
+  const controller = new AbortController();
+  pollController = controller;
+  pollInFlight = true;
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, POLL_TIMEOUT_MS);
   try {
-    const r = await fetch(`${API}/api/speed?limit=1`, { cache: 'no-store' });
+    const r = await fetch(`${API}/api/speed?limit=1`, {
+      cache: 'no-store', signal: controller.signal,
+      headers: statsKey ? { 'X-Stats-Key-Encoded': encodeURIComponent(statsKey) } : {}
+    });
+    if (r.status === 401) throw new Error('请点击此处设置统计密钥');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
+    if (serial !== pollSerial) return;
     const latest = data.latest;
 
     setStatus('已连接 · ' + new Date().toLocaleTimeString('zh-CN'), false);
 
     if (!latest) {
+      lastRecord = null;
       $('main').classList.add('idle');
       $('tps').textContent = '—';
       for (const id of ('m-model m-in m-out m-lat m-cost').split(' ')) {
@@ -330,9 +355,10 @@ async function poll() {
     }
 
     // 新请求才更新大数字，避免闪烁；优先展示纯解码生成速率（排除首字等待）
-    const isNew = latest.ts !== lastTs;
+    const record = latest.id != null ? `id:${latest.id}` : `ts:${latest.ts}`;
+    const isNew = record !== lastRecord;
     if (isNew) {
-      lastTs = latest.ts;
+      lastRecord = record;
       const tps = latest.gen_tok_per_sec || latest.tok_per_sec || 0;
       history.push(tps);
       if (history.length > SPARK_N) history.shift();
@@ -375,7 +401,10 @@ async function poll() {
       );
     }
   } catch (e) {
-    setStatus('连接失败: ' + e.message, true);
+    if (serial === pollSerial) setStatus(timedOut ? '连接超时，等待重试' : '连接失败: ' + e.message, true);
+  } finally {
+    clearTimeout(timeout);
+    if (serial === pollSerial) { pollInFlight = false; pollController = null; }
   }
 }
 
@@ -386,6 +415,10 @@ function start() {
 }
 function stop() {
   if (timer) { clearInterval(timer); timer = null; }
+  pollSerial++;
+  if (pollController) pollController.abort();
+  pollController = null;
+  pollInFlight = false;
 }
 
 // 页面隐藏时降频，省资源
