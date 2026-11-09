@@ -1,7 +1,11 @@
 """配置加载与默认值。"""
 from __future__ import annotations
 
+import ipaddress
+import logging
+import math
 import os
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -9,6 +13,27 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+log = logging.getLogger("usage-gateway.config")
+
+
+def is_loopback_host(host: str | None) -> bool:
+    """Return whether a configured listen host is local-only.
+
+    Unknown hostnames are treated as remote so a typo or future resolver
+    behavior cannot silently keep management APIs unauthenticated.
+    """
+    candidate = str(host or "").strip()
+    if not candidate:
+        return True
+    if candidate.startswith("[") and candidate.endswith("]"):
+        candidate = candidate[1:-1]
+    candidate = candidate.rstrip(".").lower()
+    if candidate == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(candidate).is_loopback
+    except ValueError:
+        return False
 
 
 def _expand(p: str | None) -> Path | None:
@@ -62,6 +87,8 @@ class Upstream:
     discovered_models: list[str] = field(default_factory=list)
     # 探测得到的不可用模型
     unavailable_models: set[str] = field(default_factory=set)
+    # 探针快照的确认时间；None 表示尚未应用过探针结果。
+    _model_health_checked: dict[str, float] | None = field(default=None, repr=False)
     # 运行时健康状态（由 health.py 维护）
     healthy: bool = True
     consecutive_failures: int = 0
@@ -71,9 +98,14 @@ class Upstream:
     def all_models(self) -> list[str]:
         """可用模型列表（已过滤掉探测失败的）。"""
         raw = self.models or self.discovered_models
-        if not self.unavailable_models:
-            return raw
-        return [m for m in raw if m not in self.unavailable_models]
+        # 每次读取都按当前时间判断，长期运行时无需等待下一次探针。
+        checked = self._model_health_checked
+        if checked is None:
+            hidden = self.unavailable_models
+        else:
+            now = time.time()
+            hidden = {m for m, ts in checked.items() if 0 <= now - ts <= MODEL_HEALTH_TTL}
+        return [m for m in raw if m not in hidden] if hidden else raw
 
     @property
     def prefix(self) -> str:
@@ -98,9 +130,8 @@ class Upstream:
 class QuotaAlertConfig:
     """额度告警配置。
 
-    只看「剩余百分比」这一维：低于阈值进 warn，再低于 critical 进 critical。
-    百分比类窗口（订阅额度）和金额类窗口（余额）都折算成百分比后统一判断，
-    所以这里不需要区分上游。
+    百分比窗口按百分比阈值判断；无百分比的金额窗口仅在明确配置
+    来源和货币的绝对金额阈值时判断，不推测额度上限。
     """
 
     enabled: bool = True
@@ -119,6 +150,39 @@ class QuotaAlertConfig:
     stale_sec: int = 3 * 3600
     # 通知渠道
     notify: dict[str, Any] = field(default_factory=dict)
+    # 来源 -> 币种 -> {warn, critical}；默认空，不启用金额告警。
+    amount_thresholds: dict[str, dict[str, dict[str, float]]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        raw = self.amount_thresholds
+        if not isinstance(raw, dict):
+            raise ValueError("alerts.amount_thresholds must be a mapping")
+        normalized: dict[str, dict[str, dict[str, float]]] = {}
+        for source, currencies in raw.items():
+            if not isinstance(source, str) or not source.strip() or not isinstance(currencies, dict):
+                raise ValueError("amount_thresholds requires source -> currency mappings")
+            normalized[source] = {}
+            for currency, limits in currencies.items():
+                if not isinstance(currency, str) or not currency.strip() or not isinstance(limits, dict):
+                    raise ValueError("amount_thresholds requires currency -> threshold mappings")
+                currency = currency.strip().upper()
+                if currency in normalized[source] or not limits or set(limits) - {"warn", "critical"}:
+                    raise ValueError("amount_thresholds has duplicate currency or invalid thresholds")
+                parsed: dict[str, float] = {}
+                for name, value in limits.items():
+                    try:
+                        if isinstance(value, bool):
+                            raise ValueError
+                        number = float(value)
+                    except (ValueError, TypeError):
+                        raise ValueError(f"invalid amount threshold: {source}/{currency}/{name}") from None
+                    if not math.isfinite(number) or number < 0:
+                        raise ValueError(f"invalid amount threshold: {source}/{currency}/{name}")
+                    parsed[name] = number
+                if "critical" in parsed and "warn" in parsed and parsed["critical"] > parsed["warn"]:
+                    raise ValueError(f"critical amount threshold exceeds warn: {source}/{currency}")
+                normalized[source][currency] = parsed
+        self.amount_thresholds = normalized
 
 
 @dataclass
@@ -139,10 +203,16 @@ class Config:
     failover: bool = False
     # 用量记录保留天数（0 = 永久保留），超期自动清理
     retention_days: int = 365
-    # /api/admin/* 管理端点的鉴权 key；留空不启用（仅本机部署时可接受）
+    # /api/admin/* 管理端点的鉴权 key；回环监听时可留空，远端监听必须配置。
     admin_key: str = ""
     # 额度告警
     alerts: QuotaAlertConfig = field(default_factory=QuotaAlertConfig)
+    # 自动探测间隔，0 禁用，探测请求可能产生费用。
+    probe_days: int = 7
+    # SSE keep-alive interval in seconds; zero disables it.
+    sse_heartbeat_sec: float = 0.0
+    # 独立统计 API 凭据；回环监听时可留空，远端监听必须配置。
+    stats_key: str = ""
 
     def find_key(self, key: str) -> ClientKey | None:
         for ck in self.client_keys:
@@ -195,7 +265,8 @@ def load_model_health(path: Path) -> dict[str, dict[str, dict]]:
         return {}
     try:
         import json
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
@@ -203,16 +274,38 @@ def load_model_health(path: Path) -> dict[str, dict[str, dict]]:
 # 只有「模型确实不存在」才隐藏。429 / 超时 / 5xx / 400 都是瞬时的，
 # 一次探测被限流就把模型锁死一周（探测本身会并发打几十个模型，很容易 429）。
 HIDDEN_STATUSES = {"gone", "not_found"}
+MODEL_HEALTH_TTL = 14 * 86400
 
 
 def apply_model_health(upstreams: list[Upstream], health: dict[str, dict[str, dict]]) -> None:
-    """把探测结果应用到上游，只隐藏确定不存在的模型。"""
+    """把探测结果应用到上游，只隐藏确定不存在的模型。
+
+    若启动时拉取 /models 失败，探测记录中的模型名可作为发现结果的后备，
+    避免整个进程生命周期都向客户端暴露空模型列表。
+    """
+    now = time.time()
     for up in upstreams:
         records = health.get(up.name) or {}
-        up.unavailable_models = {
-            m for m, r in records.items()
-            if (r or {}).get("status") in HIDDEN_STATUSES
+        if not isinstance(records, dict):
+            continue
+        valid = {
+            m: r for m, r in records.items()
+            if isinstance(m, str)
+            and isinstance(r, dict)
+            and isinstance(r.get("checked_at"), (int, float))
+            and 0 <= now - r["checked_at"] <= MODEL_HEALTH_TTL
         }
+        checked = {
+            m: r["checked_at"] for m, r in valid.items()
+            if r.get("status") in HIDDEN_STATUSES
+            and isinstance(r.get("missing_count"), int) and r["missing_count"] >= 2
+        }
+        # 发布完整快照，读取模型列表时无需修改共享集合。
+        up._model_health_checked = checked
+        up.unavailable_models = set(checked)
+        if not getattr(up, "models", None) and not getattr(up, "discovered_models", None) and valid:
+            up.discovered_models = list(valid)
+            log.info("[%s] restored %d model names from probe health", up.name, len(valid))
 
 
 def _load_alerts(raw: dict[str, Any]) -> QuotaAlertConfig:
@@ -246,6 +339,7 @@ def _load_alerts(raw: dict[str, Any]) -> QuotaAlertConfig:
         recovery_cooldown_sec=max(0, _int(section.get("recovery_cooldown_sec"), 3600)),
         stale_sec=max(60, _int(section.get("stale_sec"), 3 * 3600)),
         notify=dict(section.get("notify") or {}),
+        amount_thresholds=section.get("amount_thresholds", {}),
     )
 
 
@@ -271,6 +365,13 @@ def load_config(path: str | Path | None = None) -> Config:
         for i, item in enumerate(gateway.get("client_keys") or [])
         if item.get("key")
     ]
+    # Session attribution scopes fingerprints by the effective client name.
+    # Do not include names or keys in the error: either may contain secrets.
+    seen_names: set[str] = set()
+    for client in client_keys:
+        if client.name in seen_names:
+            raise ValueError("gateway.client_keys contains duplicate effective client names")
+        seen_names.add(client.name)
 
     upstreams: list[Upstream] = []
     for item in raw.get("upstreams") or []:
@@ -323,5 +424,8 @@ def load_config(path: str | Path | None = None) -> Config:
             else max(0, int(raw.get("retention_days") or 0))
         ),
         admin_key=str(server.get("admin_key") or "").strip(),
+        stats_key=str(server.get("stats_key") or "").strip(),
         alerts=_load_alerts(raw),
+        probe_days=max(0, int(raw.get("probe_days", 7))),
+        sse_heartbeat_sec=max(0.0, float(raw.get("sse_heartbeat_sec", 0) or 0)),
     )

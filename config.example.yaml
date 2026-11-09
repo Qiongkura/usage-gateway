@@ -5,18 +5,46 @@
 # 客户端只认 gateway.client_keys 里的 key，上游 key 只在这里。
 
 server:
+  # 默认仅本机明文 HTTP；远程访问须另行配置反向代理认证、TLS 和访问控制。
   host: 127.0.0.1
   port: 9000
-  # /api/admin/*（关停/checkpoint）的鉴权 key；留空不启用。
-  # 若把 host 改成 0.0.0.0 暴露到局域网，务必设置！调用时带 x-admin-key 头或 ?admin_key=
+  # /api/admin/*、/api/diagnostics 和上游熔断重置的鉴权 key。
+  # 回环监听时可留空；host 改为 0.0.0.0 或其他地址时必须配置，否则管理接口返回 503。
+  # 使用 X-Admin-Key 请求头；重置接口不接受 URL 参数。
   # admin_key: "change-me"
+  # 统计及链路等 API 的独立密钥。回环监听时可留空；远端监听时必须配置，
+  # 否则统计接口返回 503。使用 X-Stats-Key 请求头。
+  # /api/health 和 /api/ready 公开；管理与诊断接口仍仅使用 admin_key。
+  # 非 ASCII 密钥使用 UTF-8 百分号编码的 X-Stats-Key-Encoded / X-Admin-Key-Encoded；
+  # 看板自动编码。编码不是加密，远程访问必须使用 TLS。
+  # stats_key: "another-secret"
 
+# 数据目录包含数据库及会话归属密钥 session-attribution.key；数据库自动备份不包含密钥。
+# 请安全备份并恢复两者，限制目录访问（Windows 使用 ACL）；更换密钥会中断历史会话关联。
 data_dir: ./data
 # 采集间隔（秒）
 collect_interval_sec: 60
 
-# 用量记录保留天数：超过自动清理，防止数据库无限增长（0 = 永久保留）。
+# 金额余额告警默认关闭；只对没有百分比、且来源和币种完全匹配的余额生效。
+# 按需配置绝对金额（可只设置 warn 或 critical；均为含等于的阈值）。
+# alerts:
+#   amount_thresholds:
+#     relay-axon:
+#       USD: {warn: 20, critical: 5}
+#     mistral:
+#       EUR: {warn: 10, critical: 2}
+
+# 用量记录保留天数（0 仅关闭用量清理）；额度快照保留 3 天，链路保留 7 天。
+# 清理定期执行；data_dir/backups/ 中的 7 份滚动数据库备份可能仍含旧数据。
 retention_days: 365
+
+# 自动模型探测间隔（天），0 关闭自动探测；手动探测不受此项控制。
+# 探针发送真实上游生成请求，可能产生费用或消耗额度。
+probe_days: 7
+
+# SSE 空闲保活间隔（秒）；0 表示关闭。只对确认的 SSE 响应生效。
+# 不能缩短上游首字时间，也不能覆盖客户端或代理的硬超时。
+sse_heartbeat_sec: 0
 
 # ------------------------------------------------------------
 # 客户端 Key：发给各个客户端用，客户端看不到上游
