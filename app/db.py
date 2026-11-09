@@ -1,6 +1,8 @@
 """SQLite 存储层。"""
 from __future__ import annotations
 
+import logging
+from contextvars import ContextVar
 import sqlite3
 import threading
 import time
@@ -8,6 +10,13 @@ from pathlib import Path
 from typing import Iterable
 
 from .models import QuotaSnapshot, UsageRecord, dumps
+
+session_context: ContextVar[tuple[str | None, str | None]] = ContextVar("session_context", default=(None, None))
+
+
+class CollectorStateConflict(Exception):
+    """The collector snapshot changed while a batch was being prepared."""
+
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -100,6 +109,14 @@ class Store:
         self.conn = sqlite3.connect(db_path, check_same_thread=False, timeout=10)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        # Additive migration: existing rows remain explicitly unknown.
+        for table in ("usage_records", "request_traces"):
+            columns = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+            for name, kind in (("result", "TEXT"), ("error_stage", "TEXT"),
+                               ("error_kind", "TEXT"), ("error_status", "INTEGER"),
+                               ("session_key", "TEXT"), ("session_source", "TEXT")):
+                if name not in columns:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
         self.conn.commit()
         self._writes = 0
         # APScheduler 后台线程写、FastAPI 工作线程读写：
@@ -143,33 +160,65 @@ class Store:
 
     # ---------- 用量 ----------
 
-    def insert_usage(self, records: Iterable[UsageRecord]) -> int:
+    def insert_usage(self, records: Iterable[UsageRecord], *,
+                     collector_state: tuple[str, int, str] | None = None,
+                     expected_collector_state: tuple[int, str | None] | None = None) -> int:
+        if expected_collector_state is not None and collector_state is None:
+            raise ValueError("expected collector state requires a collector update")
         now = int(time.time())
         inserted = 0
         with self.lock:
-            for r in records:
-                # 本地采集器（antigravity / opencode / vibe）拿到的是上游自己记的账，
-                # 而同一笔请求如果也经过了网关，网关已经记过一条（client_key 非空）。
-                # 两边 dedupe_key 格式不同，只能靠「同源 + 时间贴近 + token 完全相同」识别。
-                if r.client_key is None and self._seen_from_gateway(r):
-                    continue
-                cur = self.conn.execute(
-                    """
-                    INSERT OR IGNORE INTO usage_records
-                    (dedupe_key, ts, source, account, model, requested_model,
-                     input_tokens, output_tokens, cache_read, cache_write, reasoning,
-                     cost_usd, ttft_ms, latency_ms, status, client_key, raw_json, ingested_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """,
-                    (
-                        r.dedupe_key(), r.ts, r.source, r.account, r.model, r.requested_model,
-                        r.input_tokens, r.output_tokens, r.cache_read, r.cache_write, r.reasoning,
-                        r.cost_usd, r.ttft_ms, r.latency_ms, r.status, r.client_key,
-                        dumps(r.raw), now,
-                    ),
-                )
-                inserted += cur.rowcount
-            self.conn.commit()
+            try:
+                if expected_collector_state is not None:
+                    self.conn.execute("BEGIN IMMEDIATE")
+                    row = self.conn.execute(
+                        "SELECT last_ts, last_cursor FROM collector_state WHERE collector = ?",
+                        (collector_state[0],),
+                    ).fetchone()
+                    actual = (row[0], row[1]) if row else (0, None)
+                    if actual != expected_collector_state:
+                        raise CollectorStateConflict(collector_state[0])
+                for r in records:
+                    # 本地采集器（antigravity / opencode / vibe）拿到的是上游自己记的账，
+                    # 而同一笔请求如果也经过了网关，网关已经记过一条（client_key 非空）。
+                    # 两边 dedupe_key 格式不同，只能靠「同源 + 时间贴近 + token 完全相同」识别。
+                    if r.client_key is None and self._seen_from_gateway(r):
+                        continue
+                    cur = self.conn.execute(
+                        """
+                        INSERT OR IGNORE INTO usage_records
+                        (dedupe_key, ts, source, account, model, requested_model,
+                         input_tokens, output_tokens, cache_read, cache_write, reasoning,
+                         cost_usd, ttft_ms, latency_ms, status, client_key, raw_json, ingested_at,
+                         result, error_stage, error_kind, error_status, session_key, session_source)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        """,
+                        (
+                            r.dedupe_key(), r.ts, r.source, r.account, r.model, r.requested_model,
+                            r.input_tokens, r.output_tokens, r.cache_read, r.cache_write, r.reasoning,
+                            r.cost_usd, r.ttft_ms, r.latency_ms, r.status, r.client_key,
+                            dumps(r.raw), now, r.result, r.error_stage, r.error_kind, r.error_status,
+                            r.session_key, r.session_source,
+                        ),
+                    )
+                    inserted += cur.rowcount
+                if collector_state is not None:
+                    name, ts, cursor = collector_state
+                    self.conn.execute(
+                        """
+                        INSERT INTO collector_state (collector, last_ts, last_cursor, updated_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(collector) DO UPDATE SET
+                            last_ts = MAX(last_ts, excluded.last_ts),
+                            last_cursor = excluded.last_cursor,
+                            updated_at = excluded.updated_at
+                        """,
+                        (name, ts, cursor, now),
+                    )
+                self.conn.commit()
+            except BaseException:
+                self.conn.rollback()
+                raise
         self._maybe_checkpoint()
         return inserted
 
@@ -197,19 +246,23 @@ class Store:
     def insert_quota(self, snaps: Iterable[QuotaSnapshot]) -> int:
         inserted = 0
         with self.lock:
-            for s in snaps:
-                self.conn.execute(
-                    """
-                    INSERT INTO quota_snapshots
-                    (ts, source, account, window, remaining_pct, remaining_amt,
-                     currency, resets_at, raw_json)
-                    VALUES (?,?,?,?,?,?,?,?,?)
-                    """,
-                    (s.ts, s.source, s.account, s.window, s.remaining_pct,
-                     s.remaining_amt, s.currency, s.resets_at, dumps(s.raw)),
-                )
-                inserted += 1
-            self.conn.commit()
+            try:
+                for s in snaps:
+                    self.conn.execute(
+                        """
+                        INSERT INTO quota_snapshots
+                        (ts, source, account, window, remaining_pct, remaining_amt,
+                         currency, resets_at, raw_json)
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                        """,
+                        (s.ts, s.source, s.account, s.window, s.remaining_pct,
+                         s.remaining_amt, s.currency, s.resets_at, dumps(s.raw)),
+                    )
+                    inserted += 1
+                self.conn.commit()
+            except BaseException:
+                self.conn.rollback()
+                raise
         self._maybe_checkpoint()
         return inserted
 
@@ -267,11 +320,22 @@ class Store:
         requested_model: str | None = None,
         client_key: str | None = None,
         status: int = 200,
+        result: str | None = None,
+        error_stage: str | None = None,
+        error_kind: str | None = None,
+        error_status: int | None = None,
+        session_key: str | None = None,
+        session_source: str | None = None,
     ) -> None:
         """单事务同时写入网关请求的用量与链路追踪，供后台线程调用。"""
+        result = result or ("success" if status < 400 else "upstream_error")
+        if session_key is None:
+            session_key, session_source = session_context.get()
+        if result == "upstream_error" and error_stage is None:
+            error_stage, error_kind, error_status = "response", "http_error", status
         now = int(time.time())
-        try:
-            with self.lock:
+        with self.lock:
+            try:
                 if usage_record is not None:
                     r = usage_record
                     self.conn.execute(
@@ -279,14 +343,15 @@ class Store:
                         INSERT OR IGNORE INTO usage_records
                         (dedupe_key, ts, source, account, model, requested_model,
                          input_tokens, output_tokens, cache_read, cache_write, reasoning,
-                         cost_usd, ttft_ms, latency_ms, status, client_key, raw_json, ingested_at)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                         cost_usd, ttft_ms, latency_ms, status, client_key, raw_json, ingested_at,
+                         result, error_stage, error_kind, error_status, session_key, session_source)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """,
                         (
                             r.dedupe_key(), r.ts, r.source, r.account, r.model, r.requested_model,
                             r.input_tokens, r.output_tokens, r.cache_read, r.cache_write, r.reasoning,
                             r.cost_usd, r.ttft_ms, r.latency_ms, r.status, r.client_key,
-                            dumps(r.raw), now,
+                            dumps(r.raw), now, result, error_stage, error_kind, error_status, session_key, session_source,
                         ),
                     )
                 if trace is not None:
@@ -294,18 +359,26 @@ class Store:
                         """
                         INSERT OR IGNORE INTO request_traces
                         (trace_id, ts, source, model, requested_model, client_key,
-                         status, total_ms, spans_json)
-                        VALUES (?,?,?,?,?,?,?,?,?)
+                         status, total_ms, spans_json, result, error_stage, error_kind, error_status, session_key, session_source)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         """,
                         (
                             trace.get("trace_id"), ts, source, model, requested_model,
                             client_key, status, trace.get("total_ms"), dumps(trace.get("spans")),
+                            result, error_stage, error_kind, error_status, session_key, session_source,
                         ),
                     )
                 self.conn.commit()
-            self._maybe_checkpoint()
-        except Exception:
-            pass
+            except Exception as exc:
+                # Avoid exception messages and tracebacks: they may contain request data.
+                logger = logging.getLogger("usage-gateway.db")
+                logger.error("Failed to persist request record (%s)", type(exc).__name__)
+                try:
+                    self.conn.rollback()
+                except Exception as rollback_exc:
+                    logger.error("Failed to roll back request record (%s)", type(rollback_exc).__name__)
+                return
+        self._maybe_checkpoint()
 
     def prune_traces(self, keep_days: int = 7) -> int:
         cutoff = int(time.time()) - keep_days * 86400
@@ -355,11 +428,23 @@ class Store:
 
     # ---------- 水位线 ----------
 
+    def collector_position(self, name: str) -> tuple[int, str | None]:
+        row = self.read_conn().execute(
+            "SELECT last_ts, last_cursor FROM collector_state WHERE collector = ?", (name,)
+        ).fetchone()
+        return (int(row["last_ts"] or 0), row["last_cursor"]) if row else (0, None)
+
     def watermark(self, name: str) -> int:
         row = self.read_conn().execute(
             "SELECT last_ts FROM collector_state WHERE collector = ?", (name,)
         ).fetchone()
         return int(row["last_ts"]) if row else 0
+
+    def collector_cursor(self, name: str) -> str | None:
+        row = self.read_conn().execute(
+            "SELECT last_cursor FROM collector_state WHERE collector = ?", (name,)
+        ).fetchone()
+        return row["last_cursor"] if row else None
 
     def set_watermark(self, name: str, ts: int) -> None:
         with self.lock:

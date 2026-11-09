@@ -26,6 +26,12 @@ class UsageRecord:
     status: int = 200
     client_key: Optional[str] = None
     raw: Any = None
+    result: Optional[str] = None
+    error_stage: Optional[str] = None
+    error_kind: Optional[str] = None
+    error_status: Optional[int] = None
+    session_key: Optional[str] = None
+    session_source: Optional[str] = None
 
     @property
     def total_tokens(self) -> int:
