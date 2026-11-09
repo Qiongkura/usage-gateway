@@ -21,6 +21,6 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 9000
 
 HEALTHCHECK --interval=60s --timeout=5s --start-period=20s \
-  CMD ["python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:9000/api/health', timeout=4)"]
+  CMD ["python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:9000/api/ready', timeout=4)"]
 
 ENTRYPOINT ["docker-entrypoint.sh"]

@@ -14,7 +14,13 @@ __pycache__
 *.vbs
 *.md
 config.yaml
+*.key
+credentials*.json
+.env
+.env.*
 model_health.json
+model_health.lock
+model_probe_cooldown.json
 HANDOFF.md
 harness-patch.yml
 .dockerignore

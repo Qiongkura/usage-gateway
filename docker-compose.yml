@@ -3,9 +3,9 @@ services:
     build: .
     container_name: usage-gateway
     ports:
-      - "9000:9000"
+      - "127.0.0.1:9000:9000"
     volumes:
       - ./data:/app/data          # 账本数据库 + 备份
-      - ./config.yaml:/app/config.yaml   # 挂载你的配置（首次可省略，自动用示例配置）
+      - ./config.yaml:/app/config.yaml   # 启动前先从示例复制并编辑配置
       - ./logs:/app/logs
     restart: unless-stopped

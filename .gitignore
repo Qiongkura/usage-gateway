@@ -9,6 +9,8 @@ logs/
 *.log
 debug.log
 model_health.json
+model_health.lock
+model_probe_cooldown.json
 HANDOFF.md
 harness-patch.yml
 
