@@ -1,6 +1,7 @@
 """流式转发端到端测试：mock 上游 + 真实落库，覆盖 _stream_response 的计量路径。"""
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import tempfile
@@ -8,6 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -88,6 +90,157 @@ class StreamProxyTest(unittest.TestCase):
             "SELECT * FROM usage_records ORDER BY id DESC LIMIT 1"
         ).fetchone()
         return dict(row) if row else None
+
+    def test_entry_rejections_and_session_fingerprint(self):
+        from app.main import _handle
+        ck = SimpleNamespace(name="client", allow_models=[])
+        up = make_upstream()
+        up.unavailable_models = [MODEL]
+        self.app.state.store = self.store
+        self.app.state.cfg = SimpleNamespace(find_key=lambda key: ck if key == "good" else None,
+            route=lambda model: (up, MODEL, None), find_by_prefix=lambda prefix: up,
+            failover=False, retry_rounds=1, upstreams=[up], prices=self.prices, proxy_for=lambda up: None)
+        self.app.state.tracker = None
+        @self.app.post("/entry")
+        async def entry(request: Request):
+            return await _handle(request, "/chat/completions")
+        r = self.client.post("/entry", json={})
+        self.assertEqual(r.status_code, 401)
+        r = self.client.post("/entry", headers={"authorization": "Bearer good", "x-session-id": "invalid session"}, json={})
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post("/entry", headers={"authorization": "Bearer good", "x-session-id": "session-private"}, json={})
+        self.assertEqual(r.status_code, 400)
+        row = dict(self.store.conn.execute("SELECT * FROM usage_records ORDER BY id DESC LIMIT 1").fetchone())
+        self.assertEqual(row["result"], "rejected")
+        self.assertEqual(row["session_source"], "header")
+        self.assertNotIn("session-private", str(row))
+        seen = []
+        def handler(request):
+            seen.append(request.headers)
+            return httpx.Response(200, json={"model": MODEL, "usage": {"prompt_tokens": 1}})
+        proxy_mod._HTTP_POOL[""] = httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False)
+        r = self.client.post("/entry", headers={"authorization": "Bearer good", "x-session-id": "session-private"}, json={"model": "fake/fake-model"})
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("x-session-id", seen[0])
+        row2 = dict(self.store.conn.execute("SELECT * FROM usage_records ORDER BY id DESC LIMIT 1").fetchone())
+        self.assertEqual(row["session_key"], row2["session_key"])
+
+    def test_invalid_model_types_are_recorded_without_forwarding(self):
+        from app.main import _handle
+        ck = SimpleNamespace(name="client", allow_models=[])
+        self.app.state.store = self.store
+        self.app.state.cfg = SimpleNamespace(find_key=lambda key: ck, route=lambda model: self.fail("routed invalid model"))
+        @self.app.post("/invalid-model")
+        async def entry(request: Request):
+            return await _handle(request, "/chat/completions")
+        for value in (1, True, ["x"], {"x": 1}, "   "):
+            response = self.client.post("/invalid-model", headers={"authorization": "Bearer good"}, json={"model": value})
+            self.assertEqual(response.status_code, 400)
+            row = self._last_record()
+            self.assertEqual((row["result"], row["error_kind"]), ("rejected", "invalid_model"))
+            self.assertTrue(response.headers.get("x-trace-id"))
+
+    def test_failover_filters_missing_alternates_but_keeps_explicit(self):
+        from app.main import _handle
+        from fastapi.responses import Response
+        ck = SimpleNamespace(name="client", allow_models=[])
+        explicit = Upstream(name="explicit", type="openai", base_url="http://fake.local", api_key="k", alias="group")
+        missing = Upstream(name="missing", type="openai", base_url="http://fake.local", api_key="k", alias="group")
+        available = Upstream(name="available", type="openai", base_url="http://fake.local", api_key="k", alias="group")
+        explicit.unavailable_models = [MODEL]
+        missing.unavailable_models = [MODEL]
+        self.app.state.store = self.store
+        self.app.state.tracker = None
+        cfg = SimpleNamespace(find_key=lambda key: ck, route=lambda model: (explicit, MODEL, None),
+            find_by_prefix=lambda prefix: explicit, failover=True, retry_rounds=1,
+            upstreams=[explicit, missing, available])
+        self.app.state.cfg = cfg
+        @self.app.post("/routing")
+        async def entry(request: Request):
+            return await _handle(request, "/chat/completions")
+        with patch("app.main.forward_with_failover", new_callable=AsyncMock, return_value=Response(status_code=204)) as forward:
+            response = self.client.post("/routing", headers={"authorization": "Bearer good"}, json={"model": "group/fake-model"})
+            self.assertEqual(response.status_code, 204)
+            self.assertEqual({u.name for u in forward.await_args.kwargs["candidates"]}, {"explicit", "available"})
+            cfg.failover = False
+            self.client.post("/routing", headers={"authorization": "Bearer good"}, json={"model": "group/fake-model"})
+            self.assertEqual(forward.await_args.kwargs["candidates"], [explicit])
+            cfg.failover = True
+            missing._model_health_checked = {MODEL: 1.0}
+            self.client.post("/routing", headers={"authorization": "Bearer good"}, json={"model": "group/fake-model"})
+            self.assertIn(missing, forward.await_args.kwargs["candidates"])
+
+    def test_zero_usage_success_preserves_actual_status(self):
+        for stream, force_non_stream in ((False, False), (True, False), (True, True)):
+            with self.subTest(stream=stream, force_non_stream=force_non_stream):
+                upstream = make_upstream()
+                upstream.force_non_stream = force_non_stream
+                @self.app.post(f"/zero-{stream}-{force_non_stream}")
+                async def zero(request: Request):
+                    return await forward_with_failover(request=request, cfg=self.cfg, store=self.store,
+                        tracker=None, path="/chat/completions", body=await request.body(),
+                        client_key_name="default", model=MODEL, requested_model=MODEL,
+                        candidates=[upstream], allow_retry=False)
+                content = b'data: [DONE]\n\n' if stream and not force_non_stream else b'{"choices": []}'
+                proxy_mod._HTTP_POOL[""] = httpx.AsyncClient(transport=httpx.MockTransport(
+                    lambda request: httpx.Response(201, content=content)), trust_env=False)
+                response = self.client.post(f"/zero-{stream}-{force_non_stream}", json={"stream": stream})
+                self.assertEqual(response.status_code, 201)
+                record = self._last_record()
+                self.assertEqual((record["status"], record["result"], record["input_tokens"], record["output_tokens"]),
+                                 (201, "success", 0, 0))
+                trace = self.store.conn.execute("SELECT status FROM request_traces ORDER BY id DESC LIMIT 1").fetchone()
+                self.assertEqual(trace["status"], 201)
+
+    def test_sensitive_error_not_logged_or_stored(self):
+        secret = "private-prompt-and-response-marker"
+        handler = lambda request: httpx.Response(500, json={"error": {"message": secret}})
+        proxy_mod._HTTP_POOL[""] = httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False)
+        with self.assertLogs("usage-gateway.proxy", level="WARNING") as logs:
+            response = self._post({"model": "fake/fake-model", "messages": [{"content": secret}]})
+        self.assertEqual(response.json()["error"]["message"], secret)
+        self.assertNotIn(secret, str(logs.output))
+        self.assertNotIn(secret, str(dict(self.store.conn.execute("SELECT * FROM usage_records").fetchone())))
+        self.assertNotIn(secret, str(dict(self.store.conn.execute("SELECT * FROM request_traces").fetchone())))
+
+    def test_stream_interruption_recorded_without_exception_text(self):
+        class Broken(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield sse_frame({"content": "partial"})
+                raise httpx.ReadError("private-exception-marker")
+        proxy_mod._HTTP_POOL[""] = httpx.AsyncClient(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, stream=Broken())), trust_env=False)
+        response = self._post({"model": "fake/fake-model", "stream": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("private-exception-marker", response.text)
+        record = self._last_record()
+        self.assertEqual(record["status"], 200)
+        self.assertEqual(record["result"], "stream_interrupted")
+        self.assertEqual(record["error_stage"], "stream")
+        self.assertNotIn("private-exception-marker", str(record))
+
+    def test_cancelled_stream_is_not_upstream_failure(self):
+        from app.tracing import Trace
+        class Waiting(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield sse_frame({"content": "partial"})
+                await asyncio.Event().wait()
+        async def run():
+            response = httpx.Response(200, stream=Waiting())
+            result = proxy_mod._stream_response(resp=response, request_id="cancel-test", trace=Trace("cancel-test"),
+                store=self.store, cfg=self.cfg, upstream=make_upstream(), model=MODEL,
+                requested_model=MODEL, client_key_name="default", ts=1,
+                started=__import__("time").perf_counter(), path="/chat/completions", body=b"{}")
+            iterator = result.body_iterator
+            await anext(iterator)
+            task = asyncio.create_task(anext(iterator))
+            await asyncio.sleep(0)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        asyncio.run(run())
+        rec = self._last_record()
+        self.assertEqual((rec["status"], rec["result"]), (200, "client_cancelled"))
 
     def test_stream_with_usage_recorded(self):
         """带 usage 的流式：token / 缓存 / 首字 / 成本全部落库，正文原样转发。"""

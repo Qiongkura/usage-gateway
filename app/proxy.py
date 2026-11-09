@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ from .db import Store
 from .models import UsageRecord
 from .pricing import PriceTable
 from .tracing import Trace
+from .sse import SSEParser, SSELimitError
+from .sse_heartbeat import with_sse_heartbeat
 
 log = logging.getLogger("usage-gateway.proxy")
 
@@ -174,9 +177,9 @@ def usage_from_openai(payload: dict[str, Any]) -> dict[str, int]:
     usage = payload.get("usage") or {}
     details = usage.get("completion_tokens_details") or {}
     out_details = usage.get("output_tokens_details") or {}
-    prompt_details = usage.get("prompt_tokens_details") or {}
+    prompt_details = usage.get("prompt_tokens_details") or usage.get("input_tokens_details") or {}
 
-    prompt_total = int(usage.get("prompt_tokens") or 0)
+    prompt_total = int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
 
     # 缓存读：不同供应商字段名不同
     cache_read = int(
@@ -197,7 +200,7 @@ def usage_from_openai(payload: dict[str, Any]) -> dict[str, int]:
         or 0
     )
 
-    completion_total = int(usage.get("completion_tokens") or 0)
+    completion_total = int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)
     total_tokens = int(usage.get("total_tokens") or 0)
     # 少数上游返回的 completion_tokens 不含 reasoning_tokens，但 total_tokens 含两者；
     # 若 total_tokens > prompt_total + completion_total，补齐到真实总输出，避免少算生成速度与成本。
@@ -264,6 +267,12 @@ def estimate_prompt_tokens(body: bytes) -> int:
 def _extract_stream_text(obj: dict[str, Any], sink: list[str]) -> None:
     """从 SSE 分片里累积助手输出文本（含正文、推理与工具调用参数），用于无 usage 时估算 token。"""
     # Anthropic /messages 流式增量
+    if obj.get("type") in ("response.output_text.delta", "response.refusal.delta",
+                           "response.reasoning_summary_text.delta", "response.function_call_arguments.delta"):
+        delta = obj.get("delta")
+        if isinstance(delta, str) and delta:
+            sink.append(delta)
+        return
     if obj.get("type") == "content_block_delta":
         delta = obj.get("delta")
         if isinstance(delta, dict):
@@ -305,6 +314,9 @@ def _extract_stream_text(obj: dict[str, Any], sink: list[str]) -> None:
 
 def _obj_has_output_token(obj: dict[str, Any], path: str) -> bool:
     """判断一条 SSE JSON 帧是否携带真正的生成 token（排除空 role:assistant 预热帧）。"""
+    if path.endswith("/responses"):
+        return obj.get("type") in ("response.output_text.delta", "response.refusal.delta",
+                                   "response.reasoning_summary_text.delta", "response.function_call_arguments.delta") and bool(obj.get("delta"))
     if "/messages" in path:
         etype = obj.get("type")
         if etype == "content_block_delta":
@@ -363,19 +375,24 @@ _REASONING_PART_TYPES = {"thinking", "reasoning"}
 
 def _part_text(part: Any) -> str:
     """从单个内容块/子块里取出纯文本，兼容嵌套的 thinking 结构和块数组。"""
-    if isinstance(part, str):
-        return part
-    if isinstance(part, list):
-        return "".join(_part_text(item) for item in part)
-    if not isinstance(part, dict):
-        return ""
-    for key in ("text", "thinking", "content", "reasoning"):
-        val = part.get(key)
-        if isinstance(val, str):
-            return val
-        if isinstance(val, list):
-            return "".join(_part_text(item) for item in val)
-    return ""
+    result: list[str] = []
+    stack = [part]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, list):
+            stack.extend(reversed(item))
+        elif isinstance(item, dict):
+            for key in ("text", "thinking", "content", "reasoning"):
+                value = item.get(key)
+                if isinstance(value, str):
+                    result.append(value)
+                    break
+                if isinstance(value, list):
+                    stack.extend(reversed(value))
+                    break
+    return "".join(result)
 
 
 def _split_content_parts(parts: list[Any]) -> tuple[str, str]:
@@ -384,9 +401,9 @@ def _split_content_parts(parts: list[Any]) -> tuple[str, str]:
     reasoning: list[str] = []
     for part in parts:
         ptype = part.get("type") if isinstance(part, dict) else None
-        if ptype in _REASONING_PART_TYPES:
+        if isinstance(ptype, str) and ptype in _REASONING_PART_TYPES:
             reasoning.append(_part_text(part))
-        elif ptype in _TEXT_PART_TYPES or ptype is None:
+        elif ptype is None or isinstance(ptype, str) and ptype in _TEXT_PART_TYPES:
             text.append(_part_text(part))
         # 其它类型（image_url 等）在流式增量里没有文本可提取，直接跳过
     return "".join(text), "".join(reasoning)
@@ -400,8 +417,63 @@ def _normalize_openai_payload(payload: Any) -> bool:
     if not isinstance(payload, dict):
         return False
 
-    changed = False
+    # Validate every structure we might normalize before modifying anything.
+    # Nested content arrays are unusual and intentionally passed through.
     choices = payload.get("choices")
+    if isinstance(choices, list):
+        for choice in choices:
+            if not isinstance(choice, dict):
+                return False
+            for holder in ("delta", "message"):
+                obj = choice.get(holder)
+                if obj is None:
+                    continue
+                if not isinstance(obj, dict):
+                    return False
+                role = obj.get("role")
+                if role is not None and not isinstance(role, str):
+                    return False
+                for key in ("content", "reasoning_content", "reasoning"):
+                    value = obj.get(key)
+                    if value is None or isinstance(value, str):
+                        continue
+                    if not isinstance(value, (dict, list)):
+                        return False
+                    stack = [value]
+                    while stack:
+                        part = stack.pop()
+                        if isinstance(part, str):
+                            continue
+                        if isinstance(part, list):
+                            if any(isinstance(child, list) for child in part):
+                                return False
+                            stack.extend(part)
+                        elif isinstance(part, dict):
+                            ptype = part.get("type")
+                            if ptype is not None and not isinstance(ptype, str):
+                                return False
+                            for field in ("text", "thinking", "content", "reasoning"):
+                                if field in part:
+                                    child = part[field]
+                                    if not isinstance(child, (str, list)):
+                                        return False
+                                    stack.append(child)
+                        else:
+                            return False
+                tools = obj.get("tool_calls")
+                if tools is not None:
+                    if not isinstance(tools, list):
+                        return False
+                    for tool in tools:
+                        if not isinstance(tool, dict):
+                            return False
+                        fn = tool.get("function")
+                        if fn is not None and not isinstance(fn, dict):
+                            return False
+    elif choices is not None:
+        return False
+
+    changed = False
     if choices is None and "error" not in payload and ("usage" in payload or "object" in payload):
         payload["choices"] = []
         choices = payload["choices"]
@@ -490,7 +562,7 @@ def _is_openai_chat_path(path: str) -> bool:
 
 def _normalize_sse_line(line: bytes, path: str) -> bytes:
     """归一化单条 SSE 行；不是 data 行或无需改动时原样返回（保持同一引用）。"""
-    if not _is_openai_chat_path(path):
+    if not _is_openai_chat_path(path) or path.endswith("/responses"):
         return line
     stripped = line.strip()
     if not stripped.startswith(b"data:"):
@@ -500,11 +572,14 @@ def _normalize_sse_line(line: bytes, path: str) -> bytes:
         return line
     try:
         payload = json.loads(data)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return line
     if not _normalize_openai_payload(payload):
         return line
-    return b"data: " + json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    try:
+        return b"data: " + json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:
+        return line
 
 
 def _ingest_sse_obj(
@@ -525,6 +600,8 @@ def _ingest_sse_obj(
     if collected is None:
         return
 
+    if path.endswith("/responses") and isinstance(obj.get("response"), dict):
+        obj = obj["response"]
     if isinstance(obj.get("model"), str) and obj["model"]:
         collected["model"] = obj["model"]
 
@@ -573,17 +650,20 @@ def _process_sse_line(
         return line
     try:
         payload = json.loads(data)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return line
     if not isinstance(payload, dict):
         return line
 
-    changed = _is_openai_chat_path(path) and _normalize_openai_payload(payload)
+    changed = _is_openai_chat_path(path) and not path.endswith("/responses") and _normalize_openai_payload(payload)
     _ingest_sse_obj(payload, path, collected, text_sink, first_token_at)
 
     if not changed:
         return line
-    return b"data: " + json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    try:
+        return b"data: " + json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    except UnicodeEncodeError:
+        return line
 
 
 async def _iter_normalized_sse(
@@ -592,6 +672,7 @@ async def _iter_normalized_sse(
     collected: dict[str, Any] | None = None,
     text_sink: list[str] | None = None,
     first_token_at: list[float] | None = None,
+    terminal: dict[str, Any] | None = None,
 ):
     """按完整行缓冲并按网络分片批量转发上游 SSE。
 
@@ -600,19 +681,108 @@ async def _iter_normalized_sse(
     - 单次 JSON 解析同时完成兼容改写与用量采集。
     """
     buf = b""
+    passthrough_line = False
+    max_line_bytes = 1024 * 1024
+    parser = SSEParser() if terminal is not None else None
+    parser_pending_cr = False
+
+    def observe(blocks):
+        for block in blocks:
+            if not block.dispatch:
+                continue
+            data = block.data
+            if data.strip() == "[DONE]" and _is_openai_chat_path(path) and not path.endswith("/responses"):
+                terminal["done"] = True
+                continue
+            try:
+                obj = json.loads(data)
+            except (ValueError, RecursionError):
+                obj = None
+            if block.event == "error" or (isinstance(obj, dict) and
+                    (obj.get("type") == "error" or obj.get("error"))):
+                terminal["error"] = True
+            if "/messages" in path and (block.event == "message_stop" or
+                    isinstance(obj, dict) and obj.get("type") == "message_stop"):
+                terminal["done"] = True
+            if path.endswith("/responses"):
+                event_type = obj.get("type") if isinstance(obj, dict) else None
+                if block.event in ("response.failed", "response.incomplete") or event_type in ("response.failed", "response.incomplete"):
+                    terminal["error"] = True
+                if block.event == "response.completed" or event_type == "response.completed":
+                    terminal["done"] = True
+            if isinstance(obj, dict):
+                try:
+                    _ingest_sse_obj(obj, path, collected, text_sink, first_token_at)
+                except (ValueError, TypeError, AttributeError, OverflowError):
+                    # Malformed optional accounting must never break passthrough.
+                    pass
+
     async for chunk in resp.aiter_bytes():
+        if parser is not None:
+            # A failing feed cannot return already parsed blocks. Feed through
+            # each line boundary separately so later oversized input cannot
+            # discard earlier complete observations from the same network chunk.
+            start = 0
+            try:
+                for match in re.finditer(b"[\r\n]", chunk):
+                    end = match.end()
+                    if parser_pending_cr:
+                        if chunk[start:start + 1] == b"\n":
+                            observe(parser.feed(chunk[start:start + 1]))
+                            start += 1
+                        elif start < match.start():
+                            observe(parser.feed(chunk[start:start + 1]))
+                            start += 1
+                        parser_pending_cr = False
+                    if end <= start:
+                        continue
+                    # Resolve a preceding CR independently before a potentially
+                    # oversized following line; the first byte cannot exceed a
+                    # fresh block's limit after a completed blank line.
+                    if start < match.start():
+                        observe(parser.feed(chunk[start:match.start()]))
+                    observe(parser.feed(chunk[match.start():end]))
+                    parser_pending_cr = chunk[match.start():end] == b"\r"
+                    start = end
+                if start < len(chunk):
+                    if parser_pending_cr:
+                        observe(parser.feed(chunk[start:start + 1]))
+                        start += 1
+                        parser_pending_cr = False
+                    if start < len(chunk):
+                        observe(parser.feed(chunk[start:]))
+            except SSELimitError:
+                terminal["unobservable"] = True
+                parser = None
         buf += chunk
-        if b"\n" not in buf:
-            continue
-        parts = buf.split(b"\n")
-        buf = parts.pop()
-        out_lines = [
-            _process_sse_line(raw_line, path, collected, text_sink, first_token_at)
-            for raw_line in parts
-        ]
-        yield b"\n".join(out_lines) + b"\n"
+        output = bytearray()
+        start = 0
+        for match in re.finditer(b"[\\r\\n]", buf):
+            line = buf[start:match.start()]
+            if passthrough_line or len(line) >= max_line_bytes:
+                output.extend(line)
+            else:
+                output.extend(_process_sse_line(
+                    line, path, collected if terminal is None else None,
+                    text_sink if terminal is None else None,
+                    first_token_at if terminal is None else None))
+            output.extend(match.group())
+            passthrough_line = False
+            start = match.end()
+        buf = buf[start:]
+        if len(buf) >= max_line_bytes:
+            output.extend(buf)
+            buf = b""
+            passthrough_line = True
+        if output:
+            yield bytes(output)
+    if parser is not None:
+        observe(parser.finish())
     if buf:
-        yield _process_sse_line(buf, path, collected, text_sink, first_token_at)
+        yield buf if passthrough_line else _process_sse_line(
+            buf, path, collected if terminal is None else None,
+            text_sink if terminal is None else None,
+            first_token_at if terminal is None else None)
 
 
 def upstream_cost(payload: dict[str, Any]) -> float | None:
@@ -777,7 +947,7 @@ def _build_headers(
         k: v
         for k, v in request.headers.items()
         if k.lower() not in {
-            "host", "authorization", "x-api-key", "x-goog-api-key", "content-length",
+            "host", "authorization", "x-api-key", "x-goog-api-key", "content-length", "x-session-id",
             "accept-encoding",  # 由 httpx 自己协商，避免解压错乱
         }
     }
@@ -1110,7 +1280,7 @@ async def forward_with_failover(
         client = await async_http_client(cfg.proxy_for(upstream))
         started = time.perf_counter()
 
-        trace.start("upstream", target=upstream.name, url=url, attempt=idx + 1)
+        trace.start("upstream", target=upstream.name, attempt=idx + 1)
 
         try:
             if use_stream:
@@ -1124,10 +1294,9 @@ async def forward_with_failover(
                     request.method, url, headers=headers, content=req_body,
                     params=request.query_params,
                 )
-        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
-                httpx.WriteTimeout, httpx.PoolTimeout, httpx.RemoteProtocolError) as exc:
-            last_error = f"{type(exc).__name__}: {exc}"
-            last_status = 504 if "Timeout" in type(exc).__name__ else 502
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError) as exc:
+            last_error = type(exc).__name__
+            last_status = 504 if isinstance(exc, httpx.TimeoutException) else 502
             trace.end_current(error=last_error)
             if tracker is not None:
                 tracker.record_failure(upstream.name, last_error)
@@ -1141,7 +1310,7 @@ async def forward_with_failover(
                 continue
             break
         except httpx.HTTPError as exc:
-            last_error = f"{type(exc).__name__}: {exc}"
+            last_error = type(exc).__name__
             last_status = 502
             trace.end_current(error=last_error)
             if tracker is not None:
@@ -1156,15 +1325,15 @@ async def forward_with_failover(
 
         # 额度耗尽/被限流（402/429）：同一上游换下一个 key 重发（不算跨上游 failover）
         tried_keys = {key_chain[0]}
+        key_retry_failed = False
         while status in (402, 429):
             nxt = next((k for k in _key_chain(upstream) if k not in tried_keys), None)
             if nxt is None:
                 break
             _KEY_COOLDOWN[_key_id(upstream, key_chain[0])] = time.time() + KEY_COOLDOWN_SEC
             log.warning(
-                "[%s] %s key ...%s hit %d, switching to next key ...%s (cooldown %ds)",
-                request_id[:8], upstream.name, key_chain[0][-6:], status,
-                nxt[-6:], KEY_COOLDOWN_SEC,
+                "[%s] %s key hit %d, switching key (cooldown %ds)",
+                request_id[:8], upstream.name, status, KEY_COOLDOWN_SEC,
             )
             try:
                 if use_stream:
@@ -1196,13 +1365,18 @@ async def forward_with_failover(
                 status = resp.status_code
                 latency = (time.perf_counter() - started) * 1000
             except httpx.HTTPError as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
-                last_status = 502
+                last_error = type(exc).__name__
+                last_status = 504 if isinstance(exc, httpx.TimeoutException) else 502
                 trace.end_current(error=last_error)
                 if tracker is not None:
                     tracker.record_failure(upstream.name, last_error)
-                status = last_status
+                key_retry_failed = True
                 break
+
+        if key_retry_failed:
+            if allow_retry and remaining > 0:
+                continue
+            break
 
         # 自愈：如果上游因不支持 reasoning_effort 返回 400/422，自动剥离 reasoning_effort 就地重发一次
         if status in (400, 422) and b"reasoning_effort" in req_body:
@@ -1250,14 +1424,11 @@ async def forward_with_failover(
 
         # 5xx / 429 可以换上游重试
         if status in RETRYABLE_STATUS and allow_retry and remaining > 0:
-            detail = ""
             try:
-                raw = await resp.aread()
-                detail = raw[:200].decode("utf-8", errors="ignore")
                 await resp.aclose()
             except Exception:
                 pass
-            last_error = f"HTTP {status}: {detail}"
+            last_error = f"HTTP {status}"
             last_status = status
             trace.end_current(error=last_error)
             if tracker is not None:
@@ -1357,6 +1528,10 @@ async def forward_with_failover(
         requested_model=requested_model,
         client_key=client_key_name,
         status=status_out,
+        result="timeout" if last_status == 504 else "upstream_error",
+        error_stage="upstream",
+        error_kind=last_error or "cooldown",
+        error_status=status_out,
     )
 
     return JSONResponse(
@@ -1394,38 +1569,21 @@ async def _non_stream_response(
         and _normalize_openai_payload(payload)
     )
 
-    # 4xx 基本都是「网关或客户端发了上游不认的东西」。
-    # 把请求体和上游回执一起记下来，否则只能看到一个光秃秃的 422。
     if status >= 400:
-        log.warning(
-            "[%s] %s/%s -> %d\n  request : %s\n  response: %s",
-            request_id[:8], upstream.name, model or requested_model, status,
-            (req_body or b"").decode("utf-8", "ignore")[:1500],
-            (resp.content or b"").decode("utf-8", "ignore")[:800],
-        )
+        log.warning("[%s] upstream HTTP error status=%d", request_id[:8], status)
+        trace.add("error", 0, category="upstream_error", stage="response", status=status)
 
     usage = _extract_usage(payload, path)
     actual_model = payload.get("model") or model
     up_cost = upstream_cost(payload)
 
-    usage_rec: UsageRecord | None = None
-    if any(usage.values()):
-        trace.start("record", tokens=usage, upstream_cost=up_cost)
-        usage_rec = record_from_usage(
-            source=upstream.name, model=actual_model, requested_model=requested_model,
-            client_key=client_key_name, usage=usage, ts=ts,
-            latency_ms=latency_ms, status=status, request_id=request_id,
-            prices=cfg.prices, upstream_cost_usd=up_cost,
-        )
-        trace.end_current()
-    elif status >= 400:
-        # 失败请求也要落一条零用量记录，否则看板的失败数/健康时间线统计不到它
-        usage_rec = record_from_usage(
-            source=upstream.name, model=actual_model, requested_model=requested_model,
-            client_key=client_key_name, usage={}, ts=ts,
-            latency_ms=latency_ms, status=status, request_id=request_id,
-            prices=None,
-        )
+    trace.start("record", tokens=usage, upstream_cost=up_cost)
+    usage_rec = record_from_usage(
+        source=upstream.name, model=actual_model, requested_model=requested_model,
+        client_key=client_key_name, usage=usage, ts=ts,
+        latency_ms=latency_ms, status=status, request_id=request_id,
+        prices=cfg.prices if any(usage.values()) else None, upstream_cost_usd=up_cost,
+    )
     trace.end_current()
 
     trace_summary = trace.finish()
@@ -1491,14 +1649,11 @@ async def _fake_stream_response(
     actual_model = payload.get("model") or model
     up_cost = upstream_cost(payload)
 
-    usage_rec = (
-        record_from_usage(
-            source=upstream.name, model=actual_model, requested_model=requested_model,
-            client_key=client_key_name, usage=usage, ts=ts,
-            latency_ms=latency_ms, status=status, request_id=request_id,
-            prices=cfg.prices, upstream_cost_usd=up_cost,
-        )
-        if any(usage.values()) else None
+    usage_rec = record_from_usage(
+        source=upstream.name, model=actual_model, requested_model=requested_model,
+        client_key=client_key_name, usage=usage, ts=ts,
+        latency_ms=latency_ms, status=status, request_id=request_id,
+        prices=cfg.prices if any(usage.values()) else None, upstream_cost_usd=up_cost,
     )
     trace_summary = trace.finish()
     await asyncio.to_thread(
@@ -1602,6 +1757,7 @@ async def _fake_stream_response(
 
     return StreamingResponse(
         gen(),
+        status_code=status,
         media_type="text/event-stream",
         headers={
             "cache-control": "no-cache",
@@ -1619,34 +1775,67 @@ def _stream_response(
     client_key_name: str, ts: int, started: float, path: str, body: bytes,
 ) -> Response:
     collected: dict[str, Any] = {}
-    first_chunk_at: list[float] = []
     first_token_at: list[float] = []
     text_sink: list[str] = []
+    content_type = resp.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    is_sse = content_type == "text/event-stream"
+    observe_sse = is_sse or not content_type  # Preserve legacy headerless upstreams.
+    terminal: dict[str, Any] = {}
 
     async def streamer():
+        result = "success"
+        error_kind = None
         try:
-            # _iter_normalized_sse 按完整行缓冲切分、单次解析提取 usage/真实首字/文本，
-            # 并把数组型 content 压平为标准字符串后按网络包批量 yield。
-            async for chunk in _iter_normalized_sse(
-                resp, path,
-                collected=collected,
-                text_sink=text_sink,
-                first_token_at=first_token_at,
-            ):
-                if not first_chunk_at:
-                    first_chunk_at.append(time.perf_counter())
-                yield chunk
+            async def source():
+                if observe_sse:
+                    async for chunk in _iter_normalized_sse(
+                        resp, path, collected=collected, text_sink=text_sink,
+                        first_token_at=first_token_at, terminal=terminal,
+                    ):
+                        yield chunk
+                else:
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+
+            stream = source()
+            if is_sse:
+                stream = with_sse_heartbeat(stream, getattr(cfg, "sse_heartbeat_sec", 0))
+            try:
+                async for chunk in stream:
+                    yield chunk
+            finally:
+                await stream.aclose()
+            if terminal.get("error"):
+                result, error_kind = "upstream_error", "sse_error"
+            elif terminal.get("unobservable") or not observe_sse:
+                result = "unknown"
+            elif _is_openai_chat_path(path) or "/messages" in path:
+                if not terminal.get("done"):
+                    result, error_kind = "stream_interrupted", "missing_terminal"
+            else:
+                result = "unknown"
+        except (asyncio.CancelledError, GeneratorExit):
+            result = "client_cancelled"
+            error_kind = "client_cancelled"
+            raise
         except httpx.HTTPError as exc:
-            yield f'data: {json.dumps({"error": {"message": str(exc)}})}\n\n'.encode()
+            result = "stream_interrupted"
+            error_kind = type(exc).__name__
+            # The last bytes may be a non-SSE body or an incomplete SSE event.
+            # Never append a synthetic frame to an unknown stream boundary.
+        except Exception as exc:
+            result = "stream_interrupted"
+            error_kind = type(exc).__name__
+            raise
         finally:
-            await resp.aclose()
+            try:
+                await resp.aclose()
+            except Exception:
+                pass
             latency = (time.perf_counter() - started) * 1000
             # 优先取第一个携带真实生成内容（正文/思考/tool_calls）的帧作为 TTFT，
             # 排除部分上游提前数秒发送的空 role:assistant 预热帧对首字与解码速度的干扰。
-            first_ts = (
-                first_token_at[0] if first_token_at
-                else (first_chunk_at[0] if first_chunk_at else None)
-            )
+            first_ts = first_token_at[0] if first_token_at else None
             ttft = (first_ts - started) * 1000 if first_ts is not None else None
             usage = collected.get("usage") or {}
             estimated = False
@@ -1666,8 +1855,7 @@ def _stream_response(
                     estimated = True
 
             actual_model = collected.get("model") or model
-            usage_rec = (
-                record_from_usage(
+            usage_rec = record_from_usage(
                     source=upstream.name,
                     model=actual_model,
                     requested_model=requested_model,
@@ -1675,15 +1863,15 @@ def _stream_response(
                     usage=usage,
                     ts=ts,
                     latency_ms=latency,
-                    status=200,
+                    status=resp.status_code,
                     request_id=request_id,
-                    prices=cfg.prices,
+                    prices=cfg.prices if any(usage.values()) else None,
                     upstream_cost_usd=collected.get("cost"),
                     estimated=estimated,
                     ttft_ms=ttft,
                 )
-                if (usage and any(usage.values())) else None
-            )
+            if result not in ("success", "unknown"):
+                trace.add("error", 0, category=result, stage="stream", kind=error_kind)
             trace_summary = trace.finish()
             await asyncio.to_thread(
                 store.record_request,
@@ -1694,7 +1882,10 @@ def _stream_response(
                 model=actual_model,
                 requested_model=requested_model,
                 client_key=client_key_name,
-                status=200,
+                status=resp.status_code,
+                result=result,
+                error_stage="stream" if result not in ("success", "unknown") else None,
+                error_kind=error_kind,
             )
             # 生成速度（tok/s）
             out_tokens = usage.get("output", 0) if usage else 0
@@ -1703,15 +1894,16 @@ def _stream_response(
             if ttft is not None and latency > ttft:
                 gen_tps = round(out_tokens / ((latency - ttft) / 1000), 2)
             log.info(
-                "[%s] %s/%s stream 200 ttft=%sms total=%sms out=%d tok/s=%.2f (gen %.2f)",
-                request_id[:8], upstream.name, actual_model,
+                "[%s] %s/%s stream %d ttft=%sms total=%sms out=%d tok/s=%.2f (gen %.2f)",
+                request_id[:8], upstream.name, actual_model, resp.status_code,
                 f"{ttft:.0f}" if ttft is not None else "?",
                 f"{latency:.0f}", out_tokens, tps, gen_tps,
             )
 
     return StreamingResponse(
         streamer(),
-        media_type="text/event-stream",
+        status_code=resp.status_code,
+        media_type="text/event-stream" if observe_sse else (content_type or None),
         headers={
             "cache-control": "no-cache",
             "x-accel-buffering": "no",
